@@ -1,0 +1,125 @@
+html,
+body {
+    margin: 0;
+    padding: 0;
+    width: 360px;
+    background: #f2f4f8;
+}
+
+body {
+    font-family: 'Segoe UI', sans-serif;
+}
+
+.popup-root {
+    padding: 14px;
+    background: #ffffff;
+    border: 1px solid #e4e8f0;
+    border-radius: 12px;
+    margin: 10px;
+    box-shadow: 0 8px 24px rgba(18, 29, 57, 0.08);
+}
+
+.popup-root h1 {
+    margin: 0 0 6px;
+    font-size: 17px;
+    font-weight: 700;
+    color: #111827;
+}
+
+.popup-root .subtitle {
+    margin: 0 0 10px;
+    color: #475467;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.popup-root form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.popup-root label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #333;
+}
+
+.popup-root input {
+    border: 1px solid #c9ced6;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 13px;
+    background: #fff;
+}
+
+.popup-root button {
+    margin-top: 6px;
+    border: 0;
+    border-radius: 6px;
+    padding: 9px 10px;
+    color: #fff;
+    background: #1f6feb;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.popup-root button:hover {
+    background: #175ac0;
+}
+
+.popup-root .button-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.popup-root .button-row button {
+    margin-top: 0;
+}
+
+.popup-root button.secondary {
+    background: #6b7280;
+}
+
+.popup-root button.secondary:hover {
+    background: #4b5563;
+}
+
+.popup-root .status {
+    margin: 2px 0 0;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.popup-root .status.success {
+    color: #137333;
+}
+
+.popup-root .status.error {
+    color: #b42318;
+}
+
+.popup-root .helper {
+    margin: 0;
+    font-size: 11px;
+    color: #667085;
+}
+
+.popup-root .helper-block {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.popup-root .helper-link {
+    font-size: 11px;
+    color: #175ac0;
+    text-decoration: none;
+}
+
+.popup-root .helper-link:hover {
+    text-decoration: underline;
+}

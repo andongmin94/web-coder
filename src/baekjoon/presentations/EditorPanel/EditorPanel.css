@@ -1,0 +1,27 @@
+.scroll-disabled {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.scroll-disabled::-webkit-scrollbar {
+    display: none;
+}
+
+.theme-change-button {
+    padding: 2px;
+    border: 1px solid transparent;
+    border-radius: 8px !important;
+    font-size: 18px;
+    transition: 0.3s;
+    margin-top: 4px;
+    margin-right: 4px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.theme-change-button:hover {
+    transform: scale(1.1);
+}

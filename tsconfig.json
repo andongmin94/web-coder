@@ -1,0 +1,22 @@
+{
+    "compilerOptions": {
+        "strict": true,
+        "target": "ES2018",
+        "lib": ["ES2018", "DOM", "DOM.Iterable"],
+        "moduleResolution": "bundler",
+        "module": "ES6",
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "sourceMap": false,
+        "rootDir": "src",
+        "outDir": "dist/js",
+        "noEmitOnError": true,
+        "jsx": "react",
+        "typeRoots": ["node_modules/@types"],
+        "baseUrl": ".",
+        "paths": {
+            "@/*": ["src/*"]
+        }
+    },
+    "include": ["src"]
+}
