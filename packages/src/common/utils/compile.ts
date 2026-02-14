@@ -9,7 +9,7 @@ const CompileErrorFormatConvertMap: Record<CompilerLanguage, string> = {
 };
 
 const errorMessages: Record<string, string> = {
-    limit_exceeded: `안동민의 웹 코더 - 서비스 이용 한도 초과 안내\n
+    limit_exceeded: `웹 코더 - 서비스 이용 한도 초과 안내\n
     현재 이용량 증가로 인해 일일 코드 실행 호출 한도가 초과되었습니다.
     한도는 매일 오전 9시에 자동으로 초기화됩니다.\n
     더 나은 서비스와 안정적인 환경을 제공하기 위해 최선을 다하겠습니다.

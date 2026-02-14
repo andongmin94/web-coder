@@ -1,16 +1,16 @@
 ﻿---
 layout: home
 
-title: 안동민의 웹 코더
+title: 웹 코더
 titleTemplate: BOJ 실행/제출 보조 확장
 
 hero:
-  name: 안동민의 웹 코더
+  name: 웹 코더
   text: BOJ 실행/제출 보조 확장
   tagline: 백준 제출 페이지에서 문제 풀이, 테스트 실행, 제출까지 한 화면에서 처리할 수 있는 Chrome 확장 프로그램
   image:
     src: /logo.svg
-    alt: 안동민의 웹 코더
+    alt: 웹 코더
   actions:
     - theme: brand
       text: 웹 코더 가이드
