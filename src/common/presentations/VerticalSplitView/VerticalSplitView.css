@@ -1,0 +1,27 @@
+.vertical.split-view {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+}
+
+.vertical.panel {
+    position: relative;
+    overflow-y: hidden;
+    background-color: transparent;
+}
+
+.panel.top {
+    margin-bottom: 5px;
+}
+
+.panel.bottom {
+    margin-top: 10px;
+}
+
+.vertical.resizer {
+    height: 5px;
+    cursor: row-resize;
+    position: relative;
+    background-color: #eee;
+}

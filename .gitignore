@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+
+# Build and cache
+dist/
+tmp/
+.temp/
+.cache/
+coverage/
+*.tsbuildinfo
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Local scratch files
+temp_*.html
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.history/
+.ionide
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+
+# Extension packaging / keys
+*.crx
+*.pem
+*.key
+*.vsix

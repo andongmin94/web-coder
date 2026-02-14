@@ -1,0 +1,25 @@
+.horizontal.split-view {
+    display: flex;
+    overflow: hidden;
+}
+
+.horizontal.panel {
+    position: relative;
+    overflow: auto;
+    background-color: transparent;
+}
+
+.panel.left {
+    margin-right: 5px;
+}
+
+.panel.right {
+    margin-left: 10px;
+}
+
+.horizontal.resizer {
+    width: 5px;
+    cursor: col-resize;
+    position: relative;
+    background-color: #eee;
+}

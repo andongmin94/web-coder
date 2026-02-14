@@ -1,0 +1,39 @@
+{
+    "name": "andongmin-web-coder",
+    "version": "1.0.0",
+    "description": "안동민의 웹 코더 - BOJ 실행/제출 보조 확장",
+    "main": "index.js",
+    "scripts": {
+        "watch": "vite build --watch",
+        "build": "vite build",
+        "typecheck": "tsc --noEmit",
+        "clean": "rimraf dist",
+        "style": "prettier --write \"src/**/*.{ts,tsx}\""
+    },
+    "author": "Andongmin",
+    "license": "UNLICENSED",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/andongmin94"
+    },
+    "dependencies": {
+        "axios": "^1.6.8",
+        "prism-code-editor": "^3.3.0",
+        "prismjs": "^1.29.0",
+        "react": "^18.2.0",
+        "react-dom": "^18.2.0",
+        "react-uuid": "^2.0.0"
+    },
+    "devDependencies": {
+        "@crxjs/vite-plugin": "^2.3.0",
+        "@types/chrome": "0.0.158",
+        "@types/prismjs": "^1.26.3",
+        "@types/react": "^18.0.29",
+        "@types/react-dom": "^18.0.11",
+        "@vitejs/plugin-react": "^5.1.4",
+        "prettier": "^2.2.1",
+        "rimraf": "^3.0.2 ",
+        "typescript": "^5.9.3",
+        "vite": "^7.3.1"
+    }
+}
