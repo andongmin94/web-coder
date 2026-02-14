@@ -21,7 +21,7 @@ export default defineConfig({
         logo: '/logo.svg',
 
         editLink: {
-            pattern: "https://mail.google.com/mail/?view=cm&fs=1&to=andongmin94@gmail.com&su=FLICK%20문의&body=",
+            pattern: "https://mail.google.com/mail/?view=cm&fs=1&to=andongmin94@gmail.com&su=웹%20코더%20문의&body=",
             text: "Gmail로 문의하기",
         },
 
