@@ -6,8 +6,8 @@
 - `main.ts`: content script 진입점
 - `baekjoon/scripts/main.tsx`: `/submit` 페이지 판별
 - `baekjoon/scripts/submit.tsx`: React SolveView 마운트
-- `background.ts`: JDoodle 실행 요청 처리
-- `popup.tsx`: JDoodle Client ID/Secret 설정 UI
+- `background.ts`: 실행 요청 처리 및 언어별 백엔드 라우팅
+- `popup.tsx`: 실행 방식 안내 UI (외부 API 키 불필요)
 
 ## 핵심 흐름
 
@@ -22,7 +22,9 @@
 
 1. SolveView에서 언어 ID/코드/입력값으로 컴파일 요청 생성
 2. `chrome.runtime.sendMessage({ action: 'compile' })` 전송
-3. background service worker가 `https://api.jdoodle.com/v1/execute` 호출
+3. background service worker가 언어별 실행 백엔드를 선택
+   - `cpp17`, `python3`: 로컬 WebAssembly 런타임 실행
+   - `rust`, `java`: Piston API(`<https://emkc.org/api/v2/piston/execute>`) 호출
 4. 실행 결과를 후처리 후 테스트 패널에 반영
 
 ### 3) 제출
@@ -35,7 +37,6 @@
 
 | 키 | 설명 |
 | --- | --- |
-| `jdoodle.credentials` | JDoodle Client ID/Client Secret |
 | `andongmin-web-coder-editor-save-<suffix>` | 코드 + 언어 |
 | `andongmin-web-coder-test-case-<problemId>` | 커스텀 테스트 케이스 |
 | `andongmin-web-coder-editor-theme-` | 에디터 테마 |

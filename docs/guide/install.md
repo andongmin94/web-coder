@@ -26,16 +26,10 @@ npm run build
 
 코드를 수정한 뒤에는 `npm run build`를 다시 실행하고 확장 목록에서 새로고침하면 됩니다.
 
-## 4) 팝업에서 JDoodle 키 설정
+## 4) 팝업 확인 (선택)
 
-`실행` 기능을 사용하려면 확장 팝업에서 아래 값을 저장해야 합니다.
+별도 API 키 설정은 필요하지 않습니다.
 
-- `Client ID`
-- `Client Secret`
+팝업에서는 현재 실행 방식 안내만 확인하면 됩니다.
 
-**관련 링크**
-
-- Client ID/Secret 발급 가이드: <https://www.jdoodle.com/docs/compiler-apis/client-id-secret-key/>
-- JDoodle API 대시보드: <https://www.jdoodle.com/subscribe-api>
-
-설정 키는 `jdoodle.credentials`로 `chrome.storage.local`에 저장됩니다.
+동작이 이전 상태로 보이면 확장 프로그램을 다시 로드하고 BOJ 탭을 새로고침하세요.
