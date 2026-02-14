@@ -30,8 +30,8 @@ export default defineConfig({
         ],
 
         nav: [
-            { text: '가이드', link: '/guide/', activeMatch: '/guide/' },
-            { text: '개발자', link: '/maintainer' },
+            { text: '웹 코더 가이드', link: '/guide/', activeMatch: '/guide/' },
+            { text: '웹 코더 개발자', link: '/maintainer' },
         ],
 
         sidebar: {
