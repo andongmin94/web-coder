@@ -8,6 +8,13 @@ const CompileErrorFormatConvertMap: Record<CompilerLanguage, string> = {
     rust: 'jdoodle.rs',
 };
 
+const cppCompileErrorPatterns: RegExp[] = [
+    /jdoodle\.cpp:/m,
+    /\/program(?::\d+:\d+)?:\s*(fatal\s+)?error:/m,
+    /wasm-ld:\s*error:/m,
+    /clang:\s*error:/m,
+];
+
 const errorMessages: Record<string, string> = {
     limit_exceeded: `웹 코더 - 서비스 이용 한도 초과 안내\n
     현재 이용량 증가로 인해 일일 코드 실행 호출 한도가 초과되었습니다.
@@ -61,6 +68,10 @@ const postprecessOutput = (
 };
 
 const checkCompileError = (lang: CompilerLanguage, output: string): boolean => {
+    if (lang === 'cpp17') {
+        return cppCompileErrorPatterns.some((pattern) => pattern.test(output));
+    }
+
     return output.includes(CompileErrorFormatConvertMap[lang]);
 };
 

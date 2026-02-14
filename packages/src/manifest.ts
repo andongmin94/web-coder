@@ -25,6 +25,9 @@ export default defineManifest({
         service_worker: 'src/background.ts',
         type: 'module',
     },
+    content_security_policy: {
+        extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';",
+    },
     permissions: ['storage'],
     host_permissions: [
         'https://www.acmicpc.net/*',

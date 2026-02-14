@@ -1,6 +1,7 @@
 import { postprecessOutput, processErrorCode } from '@/common/utils/compile';
 import { CodeCompileRequest } from '@/common/types/compile';
 import { trimLineByLine } from '@/common/utils/string';
+import { compileCppWithWasm } from '@/common/utils/wasm-compile';
 import {
     JDOODLE_API_URL,
     JDOODLE_CREDENTIALS_STORAGE_KEY,
@@ -41,6 +42,18 @@ const loadCredentials = async (): Promise<JdoodleCredentials | null> => {
 };
 
 async function compile(data: CodeCompileRequest) {
+    if (data.language === 'cpp17') {
+        try {
+            const output = await compileCppWithWasm(data);
+            return postprecessOutput(data.language, trimLineByLine(output));
+        } catch (e) {
+            if (e instanceof Error) {
+                return e.message;
+            }
+            return 'WASM C++ 컴파일 중 오류가 발생했습니다.';
+        }
+    }
+
     const credentials = await loadCredentials();
 
     if (!credentials) {
@@ -54,18 +67,26 @@ async function compile(data: CodeCompileRequest) {
         key: credentials.clientSecret,
     };
 
-    return fetch(JDOODLE_API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-    })
-        .then((response) => {
-            if (!response.ok) throw new Error(response.status.toString());
-            return response.json();
-        })
-        .then((json) => trimLineByLine(json.output))
-        .then((output) => postprecessOutput(data.language, output))
-        .catch((e) => processErrorCode(e.message));
+    try {
+        const response = await fetch(JDOODLE_API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+            throw new Error(response.status.toString());
+        }
+
+        const json = await response.json();
+        const output = trimLineByLine(json.output);
+        return postprecessOutput(data.language, output);
+    } catch (e) {
+        if (e instanceof Error) {
+            return processErrorCode(Number(e.message));
+        }
+        return processErrorCode(500);
+    }
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
