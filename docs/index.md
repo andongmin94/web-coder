@@ -25,6 +25,6 @@ features:
      width: 100px
     title: 웹 코더 Extension 추가하기
     linkText: Chrome 웹 스토어로 이동
-    link: https://https://github.com/andongmin94/web-coder
+    link: https://github.com/andongmin94/web-coder
 
 ---
