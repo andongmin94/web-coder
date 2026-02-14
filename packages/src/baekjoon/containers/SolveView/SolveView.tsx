@@ -76,32 +76,19 @@ const firstNonEmpty = (values: Array<string | null | undefined>): string => {
 };
 
 const getSubmitFormLanguageId = (): string | null => {
+    const submitForm = document.querySelector<HTMLFormElement>('#submit_form');
+    if (!submitForm) {
+        return null;
+    }
+
     const values = [
-        (
-            document.querySelector(
-                '#submit_form select[name=language]'
-            ) as HTMLSelectElement | null
+        submitForm.querySelector<HTMLSelectElement>('select[name=language]')
+            ?.value,
+        submitForm.querySelector<HTMLInputElement>(
+            'input[name=language]:checked'
         )?.value,
-        (
-            document.querySelector(
-                '#submit_form input[name=language]:checked'
-            ) as HTMLInputElement | null
-        )?.value,
-        (
-            document.querySelector(
-                '#submit_form input[name=language]'
-            ) as HTMLInputElement | null
-        )?.value,
-        (
-            document.querySelector(
-                'select[name=language]'
-            ) as HTMLSelectElement | null
-        )?.value,
-        (
-            document.querySelector(
-                'input[name=language]:checked'
-            ) as HTMLInputElement | null
-        )?.value,
+        submitForm.querySelector<HTMLInputElement>('input[name=language]')
+            ?.value,
     ];
 
     for (const value of values) {
@@ -111,6 +98,60 @@ const getSubmitFormLanguageId = (): string | null => {
     }
 
     return null;
+};
+
+const dispatchFormChangeEvents = (element: HTMLElement) => {
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+};
+
+const syncSubmitFormLanguageId = (languageId: string): void => {
+    const submitForm = document.querySelector<HTMLFormElement>('#submit_form');
+    if (!submitForm) {
+        return;
+    }
+
+    const select =
+        submitForm.querySelector<HTMLSelectElement>('select[name=language]');
+    if (select) {
+        select.value = languageId;
+        dispatchFormChangeEvents(select);
+    }
+
+    const radioInputs = Array.from(
+        submitForm.querySelectorAll<HTMLInputElement>(
+            'input[name=language][type=radio]'
+        )
+    );
+    if (radioInputs.length > 0) {
+        for (const input of radioInputs) {
+            input.checked = input.value === languageId;
+        }
+        const checkedInput = radioInputs.find(
+            (input) => input.value === languageId
+        );
+        if (checkedInput) {
+            dispatchFormChangeEvents(checkedInput);
+        }
+    }
+
+    const hiddenInputs = Array.from(
+        submitForm.querySelectorAll<HTMLInputElement>(
+            'input[name=language][type=hidden]'
+        )
+    );
+    for (const hiddenInput of hiddenInputs) {
+        hiddenInput.value = languageId;
+        dispatchFormChangeEvents(hiddenInput);
+    }
+
+    const plainInput = submitForm.querySelector<HTMLInputElement>(
+        'input[name=language]:not([type]), input[name=language][type=text]'
+    );
+    if (plainInput) {
+        plainInput.value = languageId;
+        dispatchFormChangeEvents(plainInput);
+    }
 };
 
 const getSubmitFormSourceCode = (): string | null => {
@@ -529,8 +570,11 @@ const SolveView: React.FC<SolveViewProps> = ({
             convertLanguageIdForReference(nextLanguageId);
         const nextCode = getDefaultCode(nextEditorLanguage);
 
+        syncSubmitFormLanguageId(nextLanguageId);
         setLanguageId(nextLanguageId);
+        setFocusLanguageId(nextLanguageId);
         setCode(nextCode);
+        setReferenceLanguage(nextReferenceLanguage);
         setReferenceUrl(getReferenceUrl(nextReferenceLanguage));
         if (shouldPersistCode(nextCode)) {
             saveEditorCode(editorCodeStorageKey, nextLanguageId, nextCode);
@@ -646,6 +690,7 @@ const SolveView: React.FC<SolveViewProps> = ({
                     setReferenceLanguage(sourceReferenceLanguage);
                     setReferenceUrl(getReferenceUrl(sourceReferenceLanguage));
                     setCode(hydratedSourceCode);
+                    syncSubmitFormLanguageId(sourceLanguageId);
                     if (hydratedSourceCode.trim().length > 0) {
                         await saveEditorCode(
                             editorCodeStorageKey,
@@ -667,6 +712,7 @@ const SolveView: React.FC<SolveViewProps> = ({
                     setReferenceLanguage(defaultReferenceLanguage);
                     setReferenceUrl(getReferenceUrl(defaultReferenceLanguage));
                     setCode(defaultCode);
+                    syncSubmitFormLanguageId(defaultLanguageId);
                 }
 
                 setCustomTestCases(savedCustomTestCases ?? []);
