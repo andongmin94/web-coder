@@ -1,10 +1,42 @@
 import { EditorLanguage } from '@/common/types/language';
 
+const DEFAULT_CPP_CODE = `#include <bits/stdc++.h>
+
+using namespace std;
+
+int main()
+{
+    ios::sync_with_stdio(false);
+    cin.tie(nullptr);
+
+    
+}
+`;
+
+const DEFAULT_JAVA_CODE = `public class Main {
+    public static void main(String[] args) {
+        
+    }
+}
+`;
+
+const DEFAULT_PYTHON_CODE = ``;
+
+const DEFAULT_RUST_CODE = `use std::io::{self, Read};
+
+fn main() {
+    let mut input = String::new();
+    io::stdin().read_to_string(&mut input).unwrap();
+
+    
+}
+`;
+
 const defaultCode: Record<EditorLanguage, string> = {
-    cpp: '#include <bits/stdc++.h>\n\nusing namespace std;\n\nint main()\n{\n    ios::sync_with_stdio(false);\n    cin.tie(nullptr);\n\n    \n}\n',
-    java: 'public class Main {\n    public static void main(String[] args) {\n        // Write your code here\n    }\n}\n',
-    python: '# Write your code here\n',
-    rust: 'use std::io::{self, Read};\n\nfn main() {\n    // Write your code here\n    let mut input = String::new();\n    io::stdin().read_to_string(&mut input).unwrap();\n}\n',
+    cpp: DEFAULT_CPP_CODE,
+    java: DEFAULT_JAVA_CODE,
+    python: DEFAULT_PYTHON_CODE,
+    rust: DEFAULT_RUST_CODE,
 };
 
 const getDefaultCode = (language: EditorLanguage): string => {
