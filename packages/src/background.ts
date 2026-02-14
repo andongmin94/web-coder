@@ -1,4 +1,4 @@
-﻿import { postprecessOutput, processErrorCode } from '@/common/utils/compile';
+import { postprecessOutput } from '@/common/utils/compile';
 import { CodeCompileRequest } from '@/common/types/compile';
 import { trimLineByLine } from '@/common/utils/string';
 import {
@@ -6,43 +6,9 @@ import {
     compilePythonWithWasm,
 } from '@/common/utils/wasm-compile';
 import {
-    JDOODLE_API_URL,
-    JDOODLE_CREDENTIALS_STORAGE_KEY,
-    MISSING_JDOODLE_CREDENTIALS_ERROR,
-    JdoodleCredentials,
-} from '@/common/config/jdoodle';
-import { getObjectFromLocalStorage } from '@/common/utils/storage';
-
-const isValidCredential = (
-    credentials: unknown
-): credentials is JdoodleCredentials => {
-    if (!credentials || typeof credentials !== 'object') {
-        return false;
-    }
-
-    const candidate = credentials as JdoodleCredentials;
-    return (
-        typeof candidate.clientId === 'string' &&
-        typeof candidate.clientSecret === 'string' &&
-        candidate.clientId.trim().length > 0 &&
-        candidate.clientSecret.trim().length > 0
-    );
-};
-
-const loadCredentials = async (): Promise<JdoodleCredentials | null> => {
-    const savedCredentials = await getObjectFromLocalStorage(
-        JDOODLE_CREDENTIALS_STORAGE_KEY
-    );
-
-    if (!isValidCredential(savedCredentials)) {
-        return null;
-    }
-
-    return {
-        clientId: savedCredentials.clientId.trim(),
-        clientSecret: savedCredentials.clientSecret.trim(),
-    };
-};
+    compileJavaWithPiston,
+    compileRustWithPiston,
+} from '@/common/utils/piston-compile';
 
 async function compile(data: CodeCompileRequest) {
     if (data.language === 'cpp17' || data.language === 'python3') {
@@ -61,39 +27,23 @@ async function compile(data: CodeCompileRequest) {
         }
     }
 
-    const credentials = await loadCredentials();
+    if (data.language === 'rust' || data.language === 'java') {
+        try {
+            const output =
+                data.language === 'rust'
+                    ? await compileRustWithPiston(data)
+                    : await compileJavaWithPiston(data);
 
-    if (!credentials) {
-        return MISSING_JDOODLE_CREDENTIALS_ERROR;
+            return postprecessOutput(data.language, trimLineByLine(output));
+        } catch (e) {
+            if (e instanceof Error) {
+                return e.message;
+            }
+            return `${data.language} execution failed.`;
+        }
     }
 
-    const payload: CodeCompileRequest = {
-        ...data,
-        clientId: credentials.clientId,
-        clientSecret: credentials.clientSecret,
-        key: credentials.clientSecret,
-    };
-
-    try {
-        const response = await fetch(JDOODLE_API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-        });
-
-        if (!response.ok) {
-            throw new Error(response.status.toString());
-        }
-
-        const json = await response.json();
-        const output = trimLineByLine(json.output);
-        return postprecessOutput(data.language, output);
-    } catch (e) {
-        if (e instanceof Error) {
-            return processErrorCode(Number(e.message));
-        }
-        return processErrorCode(500);
-    }
+    return `Unsupported language: ${data.language}`;
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
