@@ -60,6 +60,14 @@ export const loadAndParseProblemDetail = async (
     const problems = await loadProblemStorage();
     if (!problems) return null;
     const result = problems[problemId] as ProblemDetail;
+    const htmlContent = result?.htmlContent ?? '';
+    if (
+        htmlContent.includes('webcoder-solve-root') ||
+        htmlContent.includes('andongmin-web-coder-wrapper')
+    ) {
+        return null;
+    }
+
     return result ? parsingProblemDetail(result.htmlContent) : null;
 };
 

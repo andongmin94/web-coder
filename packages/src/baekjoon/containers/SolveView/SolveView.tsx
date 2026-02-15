@@ -586,39 +586,37 @@ const SolveView: React.FC<SolveViewProps> = ({
 
     useEffect(() => {
         const loadProblemData = async () => {
-            const loadedProblemContent = await loadAndParseProblemDetail(
-                problemId
-            );
-            const loadedProblemStyle = await loadAndParseProblemMathJaxStyle(
-                problemId
-            );
-
-            if (loadedProblemContent) {
-                setProblemContent(loadedProblemContent);
-                setProblemStyle(loadedProblemStyle);
-                const parsedTestCases = parsingTestCases(
-                    loadedProblemContent.props.dangerouslySetInnerHTML.__html
-                );
-                setTestCases(parsedTestCases);
-            } else {
-                fetchProblemHtml(
-                    problemId,
-                    async (html) => {
-                        const parsedContent = parsingProblemDetail(html);
-                        setProblemContent(parsedContent);
-                        const parsedStyle = parsingStyle(html);
-                        setProblemStyle(parsedStyle);
-                        const parsedTestCases = parsingTestCases(html);
-                        setTestCases(parsedTestCases);
-                    },
-                    (error) => {
-                        console.error('문제를 불러오는데 실패했습니다.', error);
-                        setProblemContent(
-                            <h1>문제를 불러오는데 실패했습니다.</h1>
+            fetchProblemHtml(
+                problemId,
+                async (html) => {
+                    const parsedContent = parsingProblemDetail(html);
+                    setProblemContent(parsedContent);
+                    const parsedStyle = parsingStyle(html);
+                    setProblemStyle(parsedStyle);
+                    const parsedTestCases = parsingTestCases(html);
+                    setTestCases(parsedTestCases);
+                },
+                async (error) => {
+                    console.error('문제를 불러오는데 실패했습니다.', error);
+                    const loadedProblemContent = await loadAndParseProblemDetail(
+                        problemId
+                    );
+                    const loadedProblemStyle =
+                        await loadAndParseProblemMathJaxStyle(problemId);
+                    if (loadedProblemContent) {
+                        setProblemContent(loadedProblemContent);
+                        setProblemStyle(loadedProblemStyle);
+                        const parsedTestCases = parsingTestCases(
+                            loadedProblemContent.props.dangerouslySetInnerHTML
+                                .__html
                         );
+                        setTestCases(parsedTestCases);
+                        return;
                     }
-                );
-            }
+
+                    setProblemContent(<h1>문제를 불러오는데 실패했습니다.</h1>);
+                }
+            );
         };
 
         loadProblemData();
