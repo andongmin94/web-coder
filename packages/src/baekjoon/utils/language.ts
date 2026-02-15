@@ -1,6 +1,20 @@
 import { CompilerLanguage } from '@/common/types/compile';
 import { EditorLanguage, ReferenceLanguage } from '@/common/types/language';
 
+export type SupportedLanguageOption = {
+    id: string;
+    label: string;
+    mime: string;
+};
+
+export const SUPPORTED_LANGUAGE_OPTIONS: SupportedLanguageOption[] = [
+    { id: '84', label: 'C++17', mime: 'text/x-c++src' },
+    { id: '93', label: 'Java 11', mime: 'text/x-java' },
+    { id: '28', label: 'Python 3', mime: 'text/x-python' },
+    { id: '95', label: 'C++20', mime: 'text/x-c++src' },
+    { id: '116', label: 'Rust 2024', mime: 'text/x-rustsrc' },
+];
+
 export const DEFAULT_LANGUAGE_ID = '95';
 
 const submitApiLanguageConvertMap: Record<string, CompilerLanguage> = {
@@ -70,5 +84,14 @@ export const convertLanguageIdForReference = (
     return (
         ReferenceLanguageConvertMap[languageId] ??
         ReferenceLanguageConvertMap[DEFAULT_LANGUAGE_ID]
+    );
+};
+
+export const filterSupportedLanguageOptions = (
+    languageIds: string[]
+): SupportedLanguageOption[] => {
+    const allowed = new Set(languageIds);
+    return SUPPORTED_LANGUAGE_OPTIONS.filter((option) =>
+        allowed.has(option.id)
     );
 };

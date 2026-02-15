@@ -15,10 +15,12 @@ import { CodeOpen, SubmitPostRequest } from '@/baekjoon/types/submit';
 import { submit } from '@/baekjoon/apis/submit';
 import {
     DEFAULT_LANGUAGE_ID,
+    SUPPORTED_LANGUAGE_OPTIONS,
     convertLanguageIdForEditor,
     convertLanguageIdForReference,
     convertLanguageIdForSubmitApi,
     convertLanguageVersionForSubmitApi,
+    filterSupportedLanguageOptions,
 } from '@/baekjoon/utils/language';
 import { CodeCompileRequest } from '@/common/types/compile';
 import { CodeOpenSelector } from '@/baekjoon/components/CodeOpenSelector';
@@ -73,6 +75,71 @@ const firstNonEmpty = (values: Array<string | null | undefined>): string => {
     }
 
     return '';
+};
+
+const collectUniqueNonEmptyValues = (
+    values: Array<string | null | undefined>
+): string[] => {
+    const seen = new Set<string>();
+    const result: string[] = [];
+
+    for (const value of values) {
+        const normalized = (value ?? '').trim();
+        if (!normalized || seen.has(normalized)) {
+            continue;
+        }
+        seen.add(normalized);
+        result.push(normalized);
+    }
+
+    return result;
+};
+
+const getSubmitFormAvailableLanguageIds = (): string[] | null => {
+    const submitForm = document.querySelector<HTMLFormElement>('#submit_form');
+    if (!submitForm) {
+        return null;
+    }
+
+    const select = submitForm.querySelector<HTMLSelectElement>(
+        'select[name=language]'
+    );
+    if (select) {
+        const selectValues = collectUniqueNonEmptyValues(
+            Array.from(select.options).map((option) => option.value)
+        );
+        if (selectValues.length > 0) {
+            return selectValues;
+        }
+    }
+
+    const radioValues = collectUniqueNonEmptyValues(
+        Array.from(
+            submitForm.querySelectorAll<HTMLInputElement>(
+                'input[name=language][type=radio]'
+            )
+        ).map((input) => input.value)
+    );
+    if (radioValues.length > 0) {
+        return radioValues;
+    }
+
+    const hiddenOrPlainValues = collectUniqueNonEmptyValues([
+        ...Array.from(
+            submitForm.querySelectorAll<HTMLInputElement>(
+                'input[name=language][type=hidden]'
+            )
+        ).map((input) => input.value),
+        submitForm.querySelector<HTMLInputElement>(
+            'input[name=language]:not([type]), input[name=language][type=text]'
+        )?.value,
+    ]);
+
+    if (hiddenOrPlainValues.length === 1) {
+        return hiddenOrPlainValues;
+    }
+
+    return null;
 };
 
 const getSubmitFormLanguageId = (): string | null => {
@@ -258,6 +325,11 @@ const SolveView: React.FC<SolveViewProps> = ({
     const [problemStyle, setProblemStyle] = useState<JSX.Element | null>(null);
     const [testCases, setTestCases] = useState<TestCase[]>([]);
     const [customTestCases, setCustomTestCases] = useState<TestCase[]>([]);
+    const [availableLanguageOptions, setAvailableLanguageOptions] = useState(
+        SUPPORTED_LANGUAGE_OPTIONS
+    );
+    const [isLanguageAvailabilityResolved, setIsLanguageAvailabilityResolved] =
+        useState(false);
     const [languageId, setLanguageId] = useState<string>(DEFAULT_LANGUAGE_ID);
     const [focusLanguageId, setFocusLanguageId] =
         useState<string>(DEFAULT_LANGUAGE_ID);
@@ -304,6 +376,49 @@ const SolveView: React.FC<SolveViewProps> = ({
 
         return targetCode.trim().length > 0;
     };
+
+    const resolveSubmittableLanguageIdWithOptions = (
+        targetLanguageId: string,
+        options: typeof availableLanguageOptions,
+        isResolved: boolean
+    ): string | null => {
+        if (options.length === 0) {
+            return isResolved ? null : targetLanguageId;
+        }
+
+        if (options.some((option) => option.id === targetLanguageId)) {
+            return targetLanguageId;
+        }
+
+        return options[0].id;
+    };
+
+    const resolveSubmittableLanguageId = (
+        targetLanguageId: string
+    ): string | null => {
+        return resolveSubmittableLanguageIdWithOptions(
+            targetLanguageId,
+            availableLanguageOptions,
+            isLanguageAvailabilityResolved
+        );
+    };
+
+    const applyLanguageState = (nextLanguageId: string): void => {
+        const nextEditorLanguage = convertLanguageIdForEditor(nextLanguageId);
+        const nextReferenceLanguage =
+            convertLanguageIdForReference(nextLanguageId);
+
+        syncSubmitFormLanguageId(nextLanguageId);
+        setLanguageId(nextLanguageId);
+        setFocusLanguageId(nextLanguageId);
+        setEditorLanguage(nextEditorLanguage);
+        setReferenceLanguage(nextReferenceLanguage);
+        setReferenceUrl(getReferenceUrl(nextReferenceLanguage));
+    };
+
+    const showNoSupportedLanguageNotice =
+        isLanguageAvailabilityResolved &&
+        availableLanguageOptions.length === 0;
 
     const codeInitialize = () => {
         setCode(getDefaultCode(editorLanguage));
@@ -352,9 +467,81 @@ const SolveView: React.FC<SolveViewProps> = ({
         setTargetTestCases([...testCases]);
     }, [testCases]);
 
+    useEffect(() => {
+        const updateAvailableLanguages = () => {
+            const formLanguageIds = getSubmitFormAvailableLanguageIds();
+            if (!formLanguageIds) {
+                return;
+            }
+
+            const nextOptions = filterSupportedLanguageOptions(formLanguageIds);
+            setIsLanguageAvailabilityResolved(true);
+            setAvailableLanguageOptions((prevOptions) => {
+                if (
+                    prevOptions.length === nextOptions.length &&
+                    prevOptions.every(
+                        (option, index) => option.id === nextOptions[index]?.id
+                    )
+                ) {
+                    return prevOptions;
+                }
+
+                return nextOptions;
+            });
+        };
+
+        updateAvailableLanguages();
+
+        const observerTarget =
+            document.querySelector('#submit_form') ?? document.body;
+        const observer = new MutationObserver(() => {
+            updateAvailableLanguages();
+        });
+        observer.observe(observerTarget, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+        });
+
+        const intervalId = window.setInterval(updateAvailableLanguages, 800);
+        const timeoutId = window.setTimeout(() => {
+            observer.disconnect();
+            window.clearInterval(intervalId);
+        }, 60000);
+
+        return () => {
+            observer.disconnect();
+            window.clearInterval(intervalId);
+            window.clearTimeout(timeoutId);
+        };
+    }, []);
+
+    useEffect(() => {
+        const nextLanguageId = resolveSubmittableLanguageId(languageId);
+        if (!nextLanguageId || nextLanguageId === languageId) {
+            return;
+        }
+
+        applyLanguageState(nextLanguageId);
+    }, [languageId, availableLanguageOptions, isLanguageAvailabilityResolved]);
+
     const saveEditorDefaultLanguage = () => {
-        saveDefaultLanguageId(languageId);
+        const nextLanguageId = resolveSubmittableLanguageId(languageId);
+        if (!nextLanguageId) {
+            alert(
+                '이 문제에서는 확장 프로그램이 지원하는 언어를 사용할 수 없습니다.'
+            );
+            return;
+        }
+
+        saveDefaultLanguageId(nextLanguageId);
         alert('현재 언어를 기본값으로 설정했습니다.');
+    };
+
+    const requestRestoreDefaultSubmitForm = () => {
+        window.dispatchEvent(
+            new CustomEvent('webcoder:restore-native-submit-form')
+        );
     };
 
     const requestCompile = (data: CodeCompileRequest): Promise<string> => {
@@ -511,9 +698,52 @@ const SolveView: React.FC<SolveViewProps> = ({
 
     const codeSubmit = async () => {
         if (isSubmitting) return;
+
+        const formLanguageIds = getSubmitFormAvailableLanguageIds();
+        const liveAvailableLanguageOptions = formLanguageIds
+            ? filterSupportedLanguageOptions(formLanguageIds)
+            : availableLanguageOptions;
+
+        if (formLanguageIds) {
+            setIsLanguageAvailabilityResolved(true);
+            setAvailableLanguageOptions((prevOptions) => {
+                if (
+                    prevOptions.length === liveAvailableLanguageOptions.length &&
+                    prevOptions.every(
+                        (option, index) =>
+                            option.id === liveAvailableLanguageOptions[index]?.id
+                    )
+                ) {
+                    return prevOptions;
+                }
+
+                return liveAvailableLanguageOptions;
+            });
+        }
+
+        const guardedLanguageId = resolveSubmittableLanguageIdWithOptions(
+            languageId,
+            liveAvailableLanguageOptions,
+            formLanguageIds ? true : isLanguageAvailabilityResolved
+        );
+
+        if (!guardedLanguageId) {
+            alert(
+                '이 문제에서는 확장 프로그램이 지원하는 제출 언어가 없습니다. BOJ 기본 제출 폼을 사용해주세요.'
+            );
+            return;
+        }
+
+        if (guardedLanguageId !== languageId) {
+            applyLanguageState(guardedLanguageId);
+            alert(
+                '현재 선택한 언어로는 제출할 수 없어 제출 가능한 언어로 자동 전환했습니다.'
+            );
+        }
+
         setIsSubmitting(true);
         if (shouldPersistCode(code)) {
-            await saveEditorCode(editorCodeStorageKey, languageId, code);
+            await saveEditorCode(editorCodeStorageKey, guardedLanguageId, code);
         }
 
         const latestCfTurnstileResponse =
@@ -528,7 +758,7 @@ const SolveView: React.FC<SolveViewProps> = ({
         const data: SubmitPostRequest = {
             'cf-turnstile-response': latestCfTurnstileResponse,
             problem_id: problemId,
-            language: Number(languageId),
+            language: Number(guardedLanguageId),
             code_open: codeOpen,
             source: code,
             csrf_key: csrfKey ?? '',
@@ -568,19 +798,21 @@ const SolveView: React.FC<SolveViewProps> = ({
     const changeLanguage = (nextLanguageId: string) => {
         hasManualLanguageSwitchRef.current = true;
 
-        const nextEditorLanguage = convertLanguageIdForEditor(nextLanguageId);
-        const nextReferenceLanguage =
-            convertLanguageIdForReference(nextLanguageId);
+        const guardedLanguageId = resolveSubmittableLanguageId(nextLanguageId);
+        if (!guardedLanguageId) {
+            alert(
+                '이 문제에서는 확장 프로그램이 지원하는 언어를 선택할 수 없습니다.'
+            );
+            return;
+        }
+
+        const nextEditorLanguage = convertLanguageIdForEditor(guardedLanguageId);
         const nextCode = getDefaultCode(nextEditorLanguage);
 
-        syncSubmitFormLanguageId(nextLanguageId);
-        setLanguageId(nextLanguageId);
-        setFocusLanguageId(nextLanguageId);
+        applyLanguageState(guardedLanguageId);
         setCode(nextCode);
-        setReferenceLanguage(nextReferenceLanguage);
-        setReferenceUrl(getReferenceUrl(nextReferenceLanguage));
         if (shouldPersistCode(nextCode)) {
-            saveEditorCode(editorCodeStorageKey, nextLanguageId, nextCode);
+            saveEditorCode(editorCodeStorageKey, guardedLanguageId, nextCode);
         }
     };
 
@@ -1005,12 +1237,46 @@ const SolveView: React.FC<SolveViewProps> = ({
                             defaultValue={codeOpen}
                             onChange={setCodeOpen}
                         />
-                        <LanguageSelectBox
-                            value={languageId}
-                            onChange={languageChangeHandle}
-                            onFocus={languageFocusHandle}
-                            onChangeDefaultLanguage={saveEditorDefaultLanguage}
-                        />
+                        {showNoSupportedLanguageNotice ? (
+                            <div
+                                onClick={requestRestoreDefaultSubmitForm}
+                                onKeyDown={(event) => {
+                                    if (
+                                        event.key === 'Enter' ||
+                                        event.key === ' '
+                                    ) {
+                                        event.preventDefault();
+                                        requestRestoreDefaultSubmitForm();
+                                    }
+                                }}
+                                role='button'
+                                tabIndex={0}
+                                style={{
+                                    marginRight: '10px',
+                                    padding: '6px 10px',
+                                    border: '1px solid #f0d3a8',
+                                    borderRadius: '8px',
+                                    background: '#fff8ec',
+                                    color: '#8a5a00',
+                                    fontSize: '12px',
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                }}
+                            >
+                                이 문제에서는 지원되는 제출 언어가 없습니다. 기본
+                                BOJ 제출 폼을 사용해주세요. (클릭해서 전환)
+                            </div>
+                        ) : (
+                            <LanguageSelectBox
+                                value={languageId}
+                                options={availableLanguageOptions}
+                                onChange={languageChangeHandle}
+                                onFocus={languageFocusHandle}
+                                onChangeDefaultLanguage={
+                                    saveEditorDefaultLanguage
+                                }
+                            />
+                        )}
                     </div>
                 }
                 solveEditorPanel={

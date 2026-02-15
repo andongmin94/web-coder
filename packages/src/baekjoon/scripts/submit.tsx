@@ -3,11 +3,13 @@ import 'prism-code-editor/prism/languages/java';
 import 'prism-code-editor/prism/languages/python';
 import 'prism-code-editor/prism/languages/rust';
 import React from 'react';
-import { createRoot } from 'react-dom/client';
+import { createRoot, Root } from 'react-dom/client';
 import { getProblemId } from '@/baekjoon/utils/parsing';
 import SolveView from '@/baekjoon/containers/SolveView/SolveView';
 import { CodeOpen } from '@/baekjoon/types/submit';
 import './submit.css';
+
+const RESTORE_NATIVE_SUBMIT_FORM_EVENT = 'webcoder:restore-native-submit-form';
 
 const toNumericString = (
     value: string | null | undefined
@@ -301,6 +303,43 @@ const resolveEditEntrySource = async ({
 };
 
 const customSubmitPage = () => {
+    let solveRoot: Root | null = null;
+    let solveRootElement: HTMLElement | null = null;
+
+    const restoreNativeSubmitForm = () => {
+        if (solveRoot) {
+            solveRoot.unmount();
+            solveRoot = null;
+        }
+
+        if (solveRootElement) {
+            solveRootElement.remove();
+            solveRootElement = null;
+        } else {
+            document.querySelector('#webcoder-solve-root')?.remove();
+        }
+
+        const submitForm = document.querySelector(
+            '#submit_form'
+        ) as HTMLFormElement | null;
+        if (submitForm) {
+            submitForm.classList.remove('webcoder-hidden-submit-form');
+        }
+
+        const problemMenu = document.querySelector(
+            'ul.problem-menu'
+        ) as HTMLElement | null;
+        const contentContainer = document.querySelector(
+            '.container.content'
+        ) as HTMLElement | null;
+        if (problemMenu) {
+            problemMenu.style.marginBottom = '';
+        }
+        if (contentContainer) {
+            contentContainer.style.width = '';
+        }
+    };
+
     const waitForSubmitForm = async (
         maxRetries = 40,
         intervalMs = 150
@@ -329,8 +368,8 @@ const customSubmitPage = () => {
     };
 
     const addSplitView = async () => {
-        const root = document.createElement('div');
-        root.id = 'webcoder-solve-root';
+        const rootElement = document.createElement('div');
+        rootElement.id = 'webcoder-solve-root';
         const problemId = getProblemId();
         const submitForm = document.querySelector(
             '#submit_form'
@@ -384,7 +423,8 @@ const customSubmitPage = () => {
         }
 
         if (problemId) {
-            createRoot(root).render(
+            solveRoot = createRoot(rootElement);
+            solveRoot.render(
                 <SolveView
                     problemId={problemId}
                     csrfKey={csrfKey}
@@ -406,10 +446,11 @@ const customSubmitPage = () => {
                 '#webcoder-solve-root'
             );
             if (previousRoot) {
-                previousRoot.replaceWith(root);
+                previousRoot.replaceWith(rootElement);
             } else {
-                problemMenu.insertAdjacentElement('afterend', root);
+                problemMenu.insertAdjacentElement('afterend', rootElement);
             }
+            solveRootElement = rootElement;
 
             // Keep original form in place and just hide it.
             if (submitForm) {
@@ -439,6 +480,10 @@ const customSubmitPage = () => {
         await waitForSubmitForm();
         await renderSubmitSplitView();
     };
+
+    window.addEventListener(RESTORE_NATIVE_SUBMIT_FORM_EVENT, () => {
+        restoreNativeSubmitForm();
+    });
 
     if (document.readyState === 'complete') {
         void init();
