@@ -11,12 +11,16 @@ import {
 } from '@/common/utils/piston-compile';
 
 async function compile(data: CodeCompileRequest) {
-    if (data.language === 'cpp17' || data.language === 'python3') {
+    if (
+        data.language === 'cpp17' ||
+        data.language === 'cpp20' ||
+        data.language === 'python3'
+    ) {
         try {
             const output =
-                data.language === 'cpp17'
-                    ? await compileCppWithWasm(data)
-                    : await compilePythonWithWasm(data);
+                data.language === 'python3'
+                    ? await compilePythonWithWasm(data)
+                    : await compileCppWithWasm(data);
 
             return postprecessOutput(data.language, trimLineByLine(output));
         } catch (e) {
