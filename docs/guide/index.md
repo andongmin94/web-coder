@@ -20,15 +20,18 @@
 
 - 브라우저: Chrome (Manifest V3)
 - 대상 페이지: `https://www.acmicpc.net/*`, `https://boj.kr/*`
-- 동작 경로: `/submit` 경로에서만 커스텀 UI 활성화
+- 동작 경로: `/submit` 접두 경로에서만 커스텀 UI 활성화 (`/submit`, `/submit/<problemId>/<submissionId>` 포함)
 
 ## 지원 언어
 
 | BOJ 언어 ID | 언어 | 내부 실행 키 | 실행 백엔드 |
 | --- | --- | --- | --- |
-| `95` | C++20 | `cpp17` | 로컬 WebAssembly |
+| `84` | C++17 | `cpp17` | 로컬 WebAssembly |
+| `95` | C++20 | `cpp20` | 로컬 WebAssembly |
 | `93` | Java 11 | `java` | Piston API |
 | `28` | Python 3 | `python3` | 로컬 WebAssembly |
 | `116` | Rust 2024 | `rust` | Piston API |
+
+실제 드롭다운에는 해당 문제의 BOJ 제출 폼에 존재하는 언어 중 확장이 지원하는 항목만 표시됩니다.
 
 언어 매핑 상세는 `packages/src/baekjoon/utils/language.ts`에서 관리합니다.
