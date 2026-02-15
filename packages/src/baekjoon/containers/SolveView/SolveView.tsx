@@ -544,6 +544,15 @@ const SolveView: React.FC<SolveViewProps> = ({
         );
     };
 
+    const restoreDefaultSubmitFormKeyDownHandle = (
+        event: React.KeyboardEvent<HTMLElement>
+    ) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            requestRestoreDefaultSubmitForm();
+        }
+    };
+
     const requestCompile = (data: CodeCompileRequest): Promise<string> => {
         return new Promise((resolve) => {
             chrome.runtime.sendMessage(
@@ -1237,46 +1246,55 @@ const SolveView: React.FC<SolveViewProps> = ({
                             defaultValue={codeOpen}
                             onChange={setCodeOpen}
                         />
-                        {showNoSupportedLanguageNotice ? (
-                            <div
+                        <div
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '10px',
+                                marginRight: '10px',
+                            }}
+                        >
+                            <a
                                 onClick={requestRestoreDefaultSubmitForm}
-                                onKeyDown={(event) => {
-                                    if (
-                                        event.key === 'Enter' ||
-                                        event.key === ' '
-                                    ) {
-                                        event.preventDefault();
-                                        requestRestoreDefaultSubmitForm();
-                                    }
-                                }}
+                                onKeyDown={restoreDefaultSubmitFormKeyDownHandle}
                                 role='button'
                                 tabIndex={0}
                                 style={{
-                                    marginRight: '10px',
-                                    padding: '6px 10px',
-                                    border: '1px solid #f0d3a8',
-                                    borderRadius: '8px',
-                                    background: '#fff8ec',
-                                    color: '#8a5a00',
-                                    fontSize: '12px',
-                                    fontWeight: 600,
                                     cursor: 'pointer',
+                                    fontSize: '12px',
+                                    lineHeight: '20px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
                                 }}
                             >
-                                이 문제에서는 지원되는 제출 언어가 없습니다. 기본
-                                BOJ 제출 폼을 사용해주세요. (클릭해서 전환)
-                            </div>
-                        ) : (
-                            <LanguageSelectBox
-                                value={languageId}
-                                options={availableLanguageOptions}
-                                onChange={languageChangeHandle}
-                                onFocus={languageFocusHandle}
-                                onChangeDefaultLanguage={
-                                    saveEditorDefaultLanguage
-                                }
-                            />
-                        )}
+                                기본 BOJ 제출 폼으로 전환
+                            </a>
+                            {showNoSupportedLanguageNotice ? (
+                                <div
+                                    style={{
+                                        padding: '6px 10px',
+                                        border: '1px solid #f0d3a8',
+                                        borderRadius: '8px',
+                                        background: '#fff8ec',
+                                        color: '#8a5a00',
+                                        fontSize: '12px',
+                                        fontWeight: 600,
+                                    }}
+                                >
+                                    이 문제에서는 지원되는 제출 언어가 없습니다.
+                                </div>
+                            ) : (
+                                <LanguageSelectBox
+                                    value={languageId}
+                                    options={availableLanguageOptions}
+                                    onChange={languageChangeHandle}
+                                    onFocus={languageFocusHandle}
+                                    onChangeDefaultLanguage={
+                                        saveEditorDefaultLanguage
+                                    }
+                                />
+                            )}
+                        </div>
                     </div>
                 }
                 solveEditorPanel={
