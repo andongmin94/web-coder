@@ -17,8 +17,6 @@ type WasmCommandResult = {
     output: string;
 };
 
-type CppLanguageStandard = 'c++17' | 'c++20';
-
 const CLANG_WASM_PATH = 'wasm/clang.wasm';
 const WASM_LD_WASM_PATH = 'wasm/wasm-ld.wasm';
 const CLANG_BASE_FS_TAR_GZ_PATH = 'wasm/clang-fs.tar.gz';
@@ -65,9 +63,7 @@ const COMPAT_BITS_STDCXX_HEADER = `#pragma once
 using namespace std;
 `;
 
-const createClangPrepareCommands = (
-    cppStandard: CppLanguageStandard
-): WasmCommand[] => [
+const createClangPrepareCommands = (): WasmCommand[] => [
     {
         binaryName: 'clang',
         binaryURL: getAssetURL(CLANG_WASM_PATH),
@@ -89,7 +85,7 @@ const createClangPrepareCommands = (
             '80',
             '-fcolor-diagnostics',
             '-O2',
-            `-std=${cppStandard}`,
+            '-std=c++17',
             '-o',
             PROGRAM_OBJ_PATH,
             '-x',
@@ -119,12 +115,6 @@ const createClangPrepareCommands = (
         env: {},
     },
 ];
-
-const resolveCppStandard = (
-    language: CodeCompileRequest['language']
-): CppLanguageStandard => {
-    return language === 'cpp20' ? 'c++20' : 'c++17';
-};
 
 let clangBaseFSCache: Promise<WASIFS> | null = null;
 let pythonBaseFSCache: Promise<WASIFS> | null = null;
@@ -314,9 +304,7 @@ const runCommand = async (
 };
 
 const compileCppWithWasm = async (data: CodeCompileRequest): Promise<string> => {
-    const clangPrepareCommands = createClangPrepareCommands(
-        resolveCppStandard(data.language)
-    );
+    const clangPrepareCommands = createClangPrepareCommands();
     const now = new Date();
     let fs: WASIFS = {
         [PROGRAM_SOURCE_PATH]: {

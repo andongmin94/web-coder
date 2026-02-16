@@ -11,11 +11,7 @@ import {
 } from '@/common/utils/piston-compile';
 
 async function compile(data: CodeCompileRequest) {
-    if (
-        data.language === 'cpp17' ||
-        data.language === 'cpp20' ||
-        data.language === 'python3'
-    ) {
+    if (data.language === 'cpp17' || data.language === 'python3') {
         try {
             const output =
                 data.language === 'python3'

@@ -6,6 +6,6 @@ type CodeCompileRequest = {
     compileOnly?: boolean;
 };
 
-type CompilerLanguage = 'cpp17' | 'cpp20' | 'java' | 'python3' | 'rust';
+type CompilerLanguage = 'cpp17' | 'java' | 'python3' | 'rust';
 
 export type { CodeCompileRequest, CompilerLanguage };

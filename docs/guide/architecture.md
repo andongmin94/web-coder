@@ -23,7 +23,7 @@
 1. SolveView에서 언어 ID/코드/입력값으로 컴파일 요청 생성
 2. `chrome.runtime.sendMessage({ action: 'compile' })` 전송
 3. background service worker가 언어별 실행 백엔드를 선택
-   - `cpp17`, `cpp20`, `python3`: 로컬 WebAssembly 런타임 실행
+   - `cpp17`, `python3`: 로컬 WebAssembly 런타임 실행
    - `rust`, `java`: Piston API(`<https://emkc.org/api/v2/piston/execute>`) 호출
 4. 실행 결과를 후처리 후 테스트 패널에 반영
 
