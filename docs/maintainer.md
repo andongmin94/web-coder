@@ -1,0 +1,28 @@
+﻿---
+layout: page
+title: 안동민의 웹 코더 개발자
+description: 안동민의 웹 코더 개발자 정보
+---
+
+<script setup>
+import {
+  VPTeamPage,
+  VPTeamMembers
+} from 'vitepress/theme'
+
+const developer = [
+  {
+    avatar: 'https://avatars.githubusercontent.com/u/110483588?v=4',
+    name: '안동민',
+    title: '개발자',
+    desc: 'BOJ 제출 보조 확장 개발 및 유지보수',
+    links: [
+      { icon: 'github', link: 'https://github.com/andongmin94' },
+    ]
+  }
+]
+</script>
+
+<VPTeamPage>
+  <VPTeamMembers :members="developer" />
+</VPTeamPage>
