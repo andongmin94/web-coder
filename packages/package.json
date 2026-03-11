@@ -1,7 +1,7 @@
 {
     "name": "andongmin-web-coder",
     "version": "1.0.0",
-    "description": "안동민의 웹 코더 - BOJ 실행/제출 보조 확장",
+    "description": "웹 코더 - BOJ 실행/제출 보조 확장",
     "main": "index.js",
     "scripts": {
         "watch": "vite build --watch",

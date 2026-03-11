@@ -1,7 +1,7 @@
 ﻿---
 layout: page
-title: 안동민의 웹 코더 개발자
-description: 안동민의 웹 코더 개발자 정보
+title: 웹 코더 개발자
+description: 웹 코더 개발자 정보
 ---
 
 <script setup>

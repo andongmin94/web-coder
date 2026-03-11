@@ -99,7 +99,7 @@ const PopupApp: React.FC = () => {
 
     return (
         <main className='popup-root'>
-            <h1>안동민의 웹 코더 설정</h1>
+            <h1>웹 코더 설정</h1>
             <p className='subtitle'>
                 BOJ 실행 버튼은 JDoodle API를 사용합니다. 아래 링크에서 키를
                 발급한 뒤 입력하세요.

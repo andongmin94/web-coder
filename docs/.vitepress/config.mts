@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitepress';
 
-const SITE_TITLE = '안동민의 웹 코더';
+const SITE_TITLE = '웹 코더';
 const SITE_DESCRIPTION =
     '백준(BOJ) 제출 페이지에서 코드 실행/제출을 보조하는 Chrome 확장 프로그램';
 

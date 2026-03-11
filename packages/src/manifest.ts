@@ -2,7 +2,7 @@ import { defineManifest } from '@crxjs/vite-plugin';
 
 export default defineManifest({
     manifest_version: 3,
-    name: '안동민의 웹 코더',
+    name: '웹 코더',
     description: '백준 제출 페이지 실행/제출 보조 에디터',
     version: '1.0.0',
     icons: {
