@@ -17,6 +17,9 @@
         "url": "https://github.com/andongmin94"
     },
     "dependencies": {
+        "@obsidize/tar-browserify": "^3.0.0",
+        "@runno/sandbox": "^0.10.2",
+        "@runno/wasi": "^0.10.0",
         "axios": "^1.6.8",
         "prism-code-editor": "^3.3.0",
         "prismjs": "^1.29.0",
