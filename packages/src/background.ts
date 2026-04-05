@@ -1,7 +1,10 @@
-import { postprecessOutput, processErrorCode } from '@/common/utils/compile';
+﻿import { postprecessOutput, processErrorCode } from '@/common/utils/compile';
 import { CodeCompileRequest } from '@/common/types/compile';
 import { trimLineByLine } from '@/common/utils/string';
-import { compileCppWithWasm } from '@/common/utils/wasm-compile';
+import {
+    compileCppWithWasm,
+    compilePythonWithWasm,
+} from '@/common/utils/wasm-compile';
 import {
     JDOODLE_API_URL,
     JDOODLE_CREDENTIALS_STORAGE_KEY,
@@ -42,15 +45,19 @@ const loadCredentials = async (): Promise<JdoodleCredentials | null> => {
 };
 
 async function compile(data: CodeCompileRequest) {
-    if (data.language === 'cpp17') {
+    if (data.language === 'cpp17' || data.language === 'python3') {
         try {
-            const output = await compileCppWithWasm(data);
+            const output =
+                data.language === 'cpp17'
+                    ? await compileCppWithWasm(data)
+                    : await compilePythonWithWasm(data);
+
             return postprecessOutput(data.language, trimLineByLine(output));
         } catch (e) {
             if (e instanceof Error) {
                 return e.message;
             }
-            return 'WASM C++ 컴파일 중 오류가 발생했습니다.';
+            return 'WASM local execution failed.';
         }
     }
 

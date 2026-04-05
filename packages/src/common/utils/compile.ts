@@ -15,6 +15,14 @@ const cppCompileErrorPatterns: RegExp[] = [
     /clang:\s*error:/m,
 ];
 
+const pythonErrorPatterns: RegExp[] = [
+    /Traceback \(most recent call last\):/m,
+    /SyntaxError:/m,
+    /IndentationError:/m,
+    /TabError:/m,
+    /File \"\/program\.py\", line \d+/m,
+];
+
 const errorMessages: Record<string, string> = {
     limit_exceeded: `웹 코더 - 서비스 이용 한도 초과 안내\n
     현재 이용량 증가로 인해 일일 코드 실행 호출 한도가 초과되었습니다.
@@ -70,6 +78,9 @@ const postprecessOutput = (
 const checkCompileError = (lang: CompilerLanguage, output: string): boolean => {
     if (lang === 'cpp17') {
         return cppCompileErrorPatterns.some((pattern) => pattern.test(output));
+    }
+    if (lang === 'python3') {
+        return pythonErrorPatterns.some((pattern) => pattern.test(output));
     }
 
     return output.includes(CompileErrorFormatConvertMap[lang]);
