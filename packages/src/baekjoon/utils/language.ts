@@ -4,7 +4,7 @@ import { EditorLanguage, ReferenceLanguage } from '@/common/types/language';
 export const DEFAULT_LANGUAGE_ID = '95';
 
 const submitApiLanguageConvertMap: Record<string, CompilerLanguage> = {
-    // JDoodle execute API currently exposes cpp17/rust codes (no explicit cpp20/rust2024 code).
+    // Internal compiler routing keys used by the extension runtime.
     '95': 'cpp17',
     '93': 'java',
     '28': 'python3',
@@ -12,7 +12,7 @@ const submitApiLanguageConvertMap: Record<string, CompilerLanguage> = {
 };
 
 const submitApiVersionConvertMap: Record<string, string> = {
-    // Use the latest available versions from JDoodle's official language table.
+    // Reserved for compiler backends that require explicit version fields.
     '95': '2',
     '93': '3',
     '28': '5',

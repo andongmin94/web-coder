@@ -32,6 +32,6 @@ export default defineManifest({
     host_permissions: [
         'https://www.acmicpc.net/*',
         'https://boj.kr/*',
-        'https://api.jdoodle.com/v1/execute',
+        'https://emkc.org/*',
     ],
 });
