@@ -1,4 +1,4 @@
-html,
+﻿html,
 body {
     margin: 0;
     padding: 0;
@@ -19,15 +19,29 @@ body {
     box-shadow: 0 8px 24px rgba(18, 29, 57, 0.08);
 }
 
+.popup-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.popup-logo {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    flex-shrink: 0;
+}
+
 .popup-root h1 {
-    margin: 0 0 6px;
+    margin: 0 0 4px;
     font-size: 17px;
     font-weight: 700;
     color: #111827;
 }
 
 .popup-root .subtitle {
-    margin: 0 0 10px;
+    margin: 0;
     color: #475467;
     font-size: 12px;
     line-height: 1.45;
