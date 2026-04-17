@@ -282,6 +282,7 @@ const SolveView: React.FC<SolveViewProps> = ({
     const [isEditorHydrated, setIsEditorHydrated] = useState<boolean>(false);
     const codeRef = useRef<string>(code);
     const languageIdRef = useRef<string>(languageId);
+    const hasManualLanguageSwitchRef = useRef<boolean>(false);
     const saveDebounceTimerRef = useRef<number | null>(null);
     const isEditEntry = isEditMode || Boolean(sourceSubmissionId);
     const editEntryStorageSuffix =
@@ -565,6 +566,8 @@ const SolveView: React.FC<SolveViewProps> = ({
     };
 
     const changeLanguage = (nextLanguageId: string) => {
+        hasManualLanguageSwitchRef.current = true;
+
         const nextEditorLanguage = convertLanguageIdForEditor(nextLanguageId);
         const nextReferenceLanguage =
             convertLanguageIdForReference(nextLanguageId);
@@ -754,6 +757,9 @@ const SolveView: React.FC<SolveViewProps> = ({
             if (cancelled || isApplying) {
                 return false;
             }
+            if (hasManualLanguageSwitchRef.current) {
+                return false;
+            }
 
             const currentCode = codeRef.current;
             const currentDefaultCode = getDefaultCode(
@@ -837,6 +843,9 @@ const SolveView: React.FC<SolveViewProps> = ({
             sourceCode: string
         ): Promise<boolean> => {
             if (cancelled) {
+                return false;
+            }
+            if (hasManualLanguageSwitchRef.current) {
                 return false;
             }
 
