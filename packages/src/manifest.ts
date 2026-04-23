@@ -4,7 +4,7 @@ export default defineManifest({
     manifest_version: 3,
     name: '웹 코더',
     description: '백준 제출 페이지 실행/제출 보조 에디터',
-    version: '1.0.0',
+    version: '1.0.1',
     icons: {
         16: 'asset/icon16.png',
         32: 'asset/icon32.png',
