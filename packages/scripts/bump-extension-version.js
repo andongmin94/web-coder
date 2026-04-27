@@ -3,14 +3,12 @@ const path = require('path');
 
 const repoRoot = path.resolve(__dirname, '..');
 const manifestPath = path.join(repoRoot, 'src', 'manifest.ts');
-const packageJsonPath = path.join(repoRoot, 'package.json');
 
 const DEFAULT_CWS_URL =
     'https://chromewebstore.google.com/detail/banebmcldnjjliapeiaobcfodgcbhfcl';
 
 const args = process.argv.slice(2);
 const isDryRun = args.includes('--dry-run');
-const isManifestOnly = args.includes('--manifest-only');
 
 const getArgValue = (name) => {
     const index = args.indexOf(name);
@@ -160,18 +158,6 @@ const writeManifestVersion = (manifestContent, nextVersion) => {
     }
 };
 
-const writePackageVersion = (nextVersion) => {
-    const packageJsonRaw = fs.readFileSync(packageJsonPath, 'utf8');
-    const newline = packageJsonRaw.includes('\r\n') ? '\r\n' : '\n';
-    const packageJson = JSON.parse(packageJsonRaw);
-    packageJson.version = nextVersion;
-    const updatedJson = `${JSON.stringify(packageJson, null, 4)}${newline}`;
-
-    if (!isDryRun) {
-        fs.writeFileSync(packageJsonPath, updatedJson, 'utf8');
-    }
-};
-
 const main = async () => {
     const { manifestContent, currentVersion } = extractManifestVersion();
     const { extensionId, storeVersion } = await fetchStoreVersion(cwsUrl);
@@ -182,18 +168,12 @@ const main = async () => {
         : currentVersion;
 
     writeManifestVersion(manifestContent, nextVersion);
-    if (!isManifestOnly) {
-        writePackageVersion(nextVersion);
-    }
 
     const modeLabel = isDryRun ? '[dry-run] ' : '';
-    const targetLabel = isManifestOnly
-        ? 'manifest only'
-        : 'manifest + package.json';
     const actionLabel = shouldBump ? 'updated' : 'kept';
 
     console.log(
-        `${modeLabel}Store check (${extensionId}): store=${storeVersion}, local=${currentVersion}, ${actionLabel}=${nextVersion} (${targetLabel})`
+        `${modeLabel}Store check (${extensionId}): store=${storeVersion}, local=${currentVersion}, ${actionLabel}=${nextVersion} (manifest only)`
     );
 };
 
