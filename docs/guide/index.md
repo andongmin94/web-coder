@@ -24,11 +24,11 @@
 
 ## 지원 언어
 
-| BOJ 언어 ID | 언어 | JDoodle 실행 매핑 |
-| --- | --- | --- |
-| `95` | C++20 | `cpp17` (`versionIndex: 2`) |
-| `93` | Java 11 | `java` (`versionIndex: 3`) |
-| `28` | Python 3 | `python3` (`versionIndex: 5`) |
-| `116` | Rust 2024 | `rust` (`versionIndex: 5`) |
+| BOJ 언어 ID | 언어 | 내부 실행 키 | 실행 백엔드 |
+| --- | --- | --- | --- |
+| `95` | C++20 | `cpp17` | 로컬 WebAssembly |
+| `93` | Java 11 | `java` | Piston API |
+| `28` | Python 3 | `python3` | 로컬 WebAssembly |
+| `116` | Rust 2024 | `rust` | Piston API |
 
 언어 매핑 상세는 `packages/src/baekjoon/utils/language.ts`에서 관리합니다.

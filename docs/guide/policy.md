@@ -11,7 +11,6 @@
 
 ## 로컬 저장 정보
 
-- JDoodle API 인증 정보(`Client ID`, `Client Secret`)
 - 언어 설정, 코드, 커스텀 테스트 케이스
 - 에디터 테마 및 기본 언어
 - 문제 본문/수식 스타일 캐시
@@ -22,13 +21,15 @@
 
 아래 경우에만 사용자 입력이 외부로 전송됩니다.
 
-- `실행` 버튼 클릭 시: 코드/입력값이 JDoodle API(`https://api.jdoodle.com/v1/execute`)로 전송
+- `실행` 버튼 클릭 시
+  - C++ / Python: 로컬 WebAssembly 실행(외부 전송 없음)
+  - Rust / Java: 코드/입력값이 Piston API(`https://emkc.org/api/v2/piston/execute`)로 전송
 - `제출` 버튼 클릭 시: 코드/언어/제출 옵션이 BOJ 제출 endpoint로 전송
 
 ## 제3자 제공
 
 - 확장 제작자가 별도 제3자에게 데이터를 제공하지 않습니다.
-- 다만 사용자가 직접 수행한 `실행`/`제출` 요청은 각 서비스(JDoodle, BOJ)의 정책을 따릅니다.
+- 다만 사용자가 직접 수행한 `실행`/`제출` 요청은 각 서비스(Piston, BOJ)의 정책을 따릅니다.
 
 ## 문의
 
