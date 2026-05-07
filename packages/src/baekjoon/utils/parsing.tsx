@@ -53,9 +53,11 @@ export const getProblemId = (): string | null => {
 
 export const parsingProblemDetail = (html: string): JSX.Element => {
     const doc = new DOMParser().parseFromString(html, 'text/html');
-    const problemContainer = doc.querySelector(
+    const problemContainer = (doc.querySelector(
         '.container.content .row'
-    ) as HTMLElement;
+    ) ??
+        doc.querySelector('#problem-body') ??
+        doc.querySelector('.row')) as HTMLElement | null;
 
     if (problemContainer) {
         const elementsToRemove = [
@@ -63,6 +65,9 @@ export const parsingProblemDetail = (html: string): JSX.Element => {
             '.problem-button',
             '#problem_tags',
             '#problem_memo',
+            '#submit_form',
+            '#webcoder-solve-root',
+            '#andongmin-web-coder-wrapper',
         ];
 
         elementsToRemove.forEach((selector) => {
@@ -94,7 +99,10 @@ export const parsingProblemDetail = (html: string): JSX.Element => {
 
 export const parsingStyle = (html: string): JSX.Element => {
     const doc = new DOMParser().parseFromString(html, 'text/html');
-    const style = doc.querySelector('style');
+    const style =
+        doc.querySelector('#MJX-CHTML-styles') ??
+        doc.querySelector('style[id*="MJX"]') ??
+        doc.querySelector('style');
 
     if (style) {
         return <style>{style.textContent}</style>;
