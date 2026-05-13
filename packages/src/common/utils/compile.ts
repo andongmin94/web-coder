@@ -57,7 +57,7 @@ const postprecessOutput = (
 };
 
 const checkCompileError = (lang: CompilerLanguage, output: string): boolean => {
-    if (lang === 'cpp17') {
+    if (lang === 'cpp17' || lang === 'cpp20') {
         return cppCompileErrorPatterns.some((pattern) => pattern.test(output));
     }
 

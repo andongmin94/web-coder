@@ -5,7 +5,8 @@ export const DEFAULT_LANGUAGE_ID = '95';
 
 const submitApiLanguageConvertMap: Record<string, CompilerLanguage> = {
     // Internal compiler routing keys used by the extension runtime.
-    '95': 'cpp17',
+    '84': 'cpp17',
+    '95': 'cpp20',
     '93': 'java',
     '28': 'python3',
     '116': 'rust',
@@ -13,6 +14,7 @@ const submitApiLanguageConvertMap: Record<string, CompilerLanguage> = {
 
 const submitApiVersionConvertMap: Record<string, string> = {
     // Reserved for compiler backends that require explicit version fields.
+    '84': '2',
     '95': '2',
     '93': '3',
     '28': '5',
@@ -20,6 +22,7 @@ const submitApiVersionConvertMap: Record<string, string> = {
 };
 
 const editorLanguageConvertMap: Record<string, EditorLanguage> = {
+    '84': 'cpp',
     '95': 'cpp',
     '93': 'java',
     '28': 'python',
@@ -27,6 +30,7 @@ const editorLanguageConvertMap: Record<string, EditorLanguage> = {
 };
 
 const ReferenceLanguageConvertMap: Record<string, ReferenceLanguage> = {
+    '84': 'cpp17',
     '95': 'cpp20',
     '93': 'java11',
     '28': 'python',
