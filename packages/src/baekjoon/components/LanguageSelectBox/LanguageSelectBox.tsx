@@ -1,7 +1,9 @@
 import React, { ChangeEvent } from 'react';
+import type { SupportedLanguageOption } from '@/baekjoon/utils/language';
 
 interface LanguageSelectBoxProps {
     value: string;
+    options: SupportedLanguageOption[];
     onChange: (event: ChangeEvent<HTMLSelectElement>) => void;
     onFocus: () => void;
     onChangeDefaultLanguage: () => void;
@@ -9,6 +11,7 @@ interface LanguageSelectBoxProps {
 
 const LanguageSelectBox: React.FC<LanguageSelectBoxProps> = ({
     value,
+    options,
     onChange,
     onFocus,
     onChangeDefaultLanguage,
@@ -40,21 +43,15 @@ const LanguageSelectBox: React.FC<LanguageSelectBoxProps> = ({
                         cursor: 'pointer',
                     }}
                 >
-                    <option value='84' data-mime='text/x-c++src'>
-                        C++17
-                    </option>
-                    <option value='93' data-mime='text/x-java'>
-                        Java 11
-                    </option>
-                    <option value='28' data-mime='text/x-python'>
-                        Python 3
-                    </option>
-                    <option value='95' data-mime='text/x-c++src'>
-                        C++20
-                    </option>
-                    <option value='116' data-mime='text/x-rustsrc'>
-                        Rust 2024
-                    </option>
+                    {options.map((option) => (
+                        <option
+                            key={option.id}
+                            value={option.id}
+                            data-mime={option.mime}
+                        >
+                            {option.label}
+                        </option>
+                    ))}
                 </select>
             </div>
         </div>
