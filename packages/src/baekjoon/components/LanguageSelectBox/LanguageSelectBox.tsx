@@ -20,22 +20,35 @@ const LanguageSelectBox: React.FC<LanguageSelectBoxProps> = ({
         <div
             style={{
                 display: 'flex',
+                alignItems: 'center',
                 gap: '20px',
                 justifyContent: 'right',
                 marginRight: '10px',
             }}
         >
-            <a onClick={onChangeDefaultLanguage} style={{ cursor: 'pointer' }}>
+            <a
+                onClick={onChangeDefaultLanguage}
+                style={{
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    lineHeight: '20px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                }}
+            >
                 현재 언어를 기본값으로 설정
             </a>
-            <label className='control-label'>언어</label>
+            <label
+                className='control-label'
+                style={{ marginBottom: 0, lineHeight: '20px' }}
+            >
+                언어
+            </label>
             <div>
                 <select
                     id='language'
                     name='language'
-                    data-placeholder='언어를 선택해 주세요'
                     className='language-select chosen-select'
-                    data-no_results_text='검색 결과가 없습니다'
                     value={value}
                     onChange={onChange}
                     onFocus={onFocus}
