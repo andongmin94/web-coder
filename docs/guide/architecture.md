@@ -23,26 +23,26 @@
 1. SolveView에서 언어 ID/코드/입력값으로 컴파일 요청 생성
 2. `chrome.runtime.sendMessage({ action: 'compile' })` 전송
 3. background service worker가 언어별 실행 백엔드를 선택
-   - `cpp17`, `python3`: 로컬 WebAssembly 런타임 실행
+   - `cpp17`, `cpp20`, `python3`: 로컬 WebAssembly 런타임 실행
    - `rust`, `java`: Piston API(`<https://emkc.org/api/v2/piston/execute>`) 호출
 4. 실행 결과를 후처리 후 테스트 패널에 반영
 
 ### 3) 제출
 
 1. 현재 코드/언어/공개 설정/토큰을 조합
-2. 원본 hidden 필드를 최대한 보존한 분리 form(detached form) 생성
-3. BOJ 제출 endpoint로 POST
+2. 원본 hidden 필드를 최대한 보존한 분리 form(detached form)을 생성해 BOJ 제출
+3. 분리 form 제출이 불가능한 경우 axios POST로 fallback
 
 ## 저장 키(`chrome.storage.local`)
 
 | 키 | 설명 |
 | --- | --- |
-| `andongmin-web-coder-editor-save-<suffix>` | 코드 + 언어 |
+| `andongmin-web-coder-editor-save-<suffix>` | 코드 + 언어 (문제/수정 제출 단위) |
 | `andongmin-web-coder-test-case-<problemId>` | 커스텀 테스트 케이스 |
 | `andongmin-web-coder-editor-theme-` | 에디터 테마 |
 | `andongmin-web-coder-default-language-` | 기본 언어 ID |
-| `andongmin-web-coder-problem-save` | 문제 HTML 캐시 |
-| `andongmin-web-coder-problem-style-save` | MathJax 스타일 캐시 |
+
+문제/언어 가용성 판단은 실제 `#submit_form`의 언어 필드를 주기적으로 동기화해 처리합니다.
 
 ## 코드 기준 주요 파일
 
@@ -52,4 +52,5 @@
 - `packages/src/popup.tsx`
 - `packages/src/baekjoon/scripts/submit.tsx`
 - `packages/src/baekjoon/containers/SolveView/SolveView.tsx`
+- `packages/src/baekjoon/utils/language.ts`
 - `packages/src/baekjoon/utils/storage/editor.ts`
