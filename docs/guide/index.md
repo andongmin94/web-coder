@@ -27,7 +27,6 @@
 | BOJ 언어 ID | 언어 | 내부 실행 키 | 실행 백엔드 |
 | --- | --- | --- | --- |
 | `84` | C++17 | `cpp17` | 로컬 WebAssembly |
-| `95` | C++20 | `cpp20` | 로컬 WebAssembly |
 | `93` | Java 11 | `java` | Piston API |
 | `28` | Python 3 | `python3` | 로컬 WebAssembly |
 | `116` | Rust 2024 | `rust` | Piston API |
