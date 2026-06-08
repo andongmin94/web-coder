@@ -7,7 +7,7 @@ titleTemplate: BOJ 실행/제출 보조 확장
 hero:
   name: 웹 코더
   text: BOJ 실행/제출 보조 확장
-  tagline: 백준 제출 페이지에서 문제 풀이, 테스트 실행, 제출까지 한 화면에서 처리할 수 있는 Chrome 확장 프로그램
+  tagline: 백준 문제풀이부터 제출까지 한번에 할 수 있는 Chrome 확장
   image:
     src: /logo.svg
     alt: 웹 코더

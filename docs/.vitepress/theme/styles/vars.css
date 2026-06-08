@@ -20,7 +20,7 @@
 :root {
   --vp-c-brand: #003E91;
   --vp-c-brand-1: #003E91;
-  --vp-c-brand-light: #004fb6;
+  --vp-c-brand-light: #005CD8;
   --vp-c-brand-lighter: #003E91;
   --vp-c-brand-lightest: #003E91;
   --vp-c-brand-dark: #003E91;
@@ -31,7 +31,7 @@
 .dark {
   --vp-c-brand: #005CD8;
   --vp-c-brand-1: #005CD8;
-  --vp-c-brand-light: #004fb6;
+  --vp-c-brand-light: #003E91;
   --vp-c-brand-lighter: #005CD8;
   --vp-c-brand-lightest: #005CD8;
   --vp-c-brand-dark: #005CD8;
