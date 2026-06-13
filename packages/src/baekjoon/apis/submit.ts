@@ -1,3 +1,4 @@
+// 백준 페이지와 통신하거나 제출 요청을 보내는 API 유틸 파일입니다.
 import axios, { AxiosResponse } from 'axios';
 import { SubmitPostRequest } from '@/baekjoon/types/submit';
 

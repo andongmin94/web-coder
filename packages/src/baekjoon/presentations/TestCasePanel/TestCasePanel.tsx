@@ -1,3 +1,4 @@
+// 백준 화면에 표시할 순수 프레젠테이션 UI 파일입니다.
 import TestCaseResultElement from '@/baekjoon/components/TestCaseResultElement/TestCaseResultElement';
 import { TestCase } from '@/baekjoon/types/problem';
 import { replaceSpaceAndNewlineToHtml } from '@/common/utils/string';

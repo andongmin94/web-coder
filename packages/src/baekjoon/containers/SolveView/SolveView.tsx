@@ -1,4 +1,5 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+// 백준 화면 상태와 동작을 묶어 관리하는 컨테이너 파일입니다.
+import React, { useState, useEffect, useRef } from 'react';
 import { ProblemPanel } from '@/baekjoon/presentations/ProblemPanel';
 import { EditorPanel } from '@/baekjoon/presentations/EditorPanel';
 import { fetchProblemHtml } from '@/baekjoon/apis/problem';
@@ -22,7 +23,9 @@ import {
     convertLanguageVersionForSubmitApi,
     filterSupportedLanguageOptions,
 } from '@/baekjoon/utils/language';
-import { CodeCompileRequest } from '@/common/types/compile';
+import {
+    CodeCompileRequest,
+} from '@/common/types/compile';
 import { CodeOpenSelector } from '@/baekjoon/components/CodeOpenSelector';
 import { getDefaultCode } from '@/common/utils/default-code';
 import { EditorLanguage, ReferenceLanguage } from '@/common/types/language';
@@ -599,16 +602,14 @@ const SolveView: React.FC<SolveViewProps> = ({
 
         try {
             const outputs = await Promise.all(
-                currentTestCases.map((testCase) => {
-                    const data: CodeCompileRequest = {
+                currentTestCases.map((testCase) =>
+                    requestCompile({
                         language: language,
                         versionIndex: versionIndex,
                         script: script,
                         stdin: testCase.input,
-                    };
-
-                    return requestCompile(data);
-                })
+                    })
+                )
             );
 
             const newTestCases = currentTestCases.map((testCase, index) => ({

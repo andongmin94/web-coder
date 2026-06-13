@@ -1,3 +1,4 @@
+// 백준 기능에서 재사용하는 계산과 변환 로직을 담은 유틸 파일입니다.
 import {
     getObjectFromLocalStorage,
     saveObjectInLocalStorage,

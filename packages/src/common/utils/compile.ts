@@ -1,3 +1,4 @@
+// 공통으로 재사용하는 실행 로직과 도우미 함수를 담은 유틸 파일입니다.
 import { CompilerLanguage } from '@/common/types/compile';
 
 const cppCompileErrorPatterns: RegExp[] = [
@@ -14,20 +15,8 @@ const pythonErrorPatterns: RegExp[] = [
     /File "\/program\.py", line \d+/m,
 ];
 
-const rustErrorPatterns: RegExp[] = [
-    /error(\[[E0-9]+\])?:/m,
-    /--> .*\.rs:\d+:\d+/m,
-];
-
-const javaErrorPatterns: RegExp[] = [
-    /(?:^|\n).*\.java:\d+:\s*error:/m,
-    /Could not find or load main class/m,
-    /Exception in thread "main" java\.lang\./m,
-];
-
 const serverErrorPatterns: RegExp[] = [
     /WASM local execution failed\./i,
-    /execution API error \(\d+\)/i,
     /execution failed\./i,
     /Failed to fetch/i,
     /NetworkError/i,
@@ -65,11 +54,7 @@ const checkCompileError = (lang: CompilerLanguage, output: string): boolean => {
         return pythonErrorPatterns.some((pattern) => pattern.test(output));
     }
 
-    if (lang === 'java') {
-        return javaErrorPatterns.some((pattern) => pattern.test(output));
-    }
-
-    return rustErrorPatterns.some((pattern) => pattern.test(output));
+    return false;
 };
 
 const checkServerError = (output: string): boolean => {

@@ -1,3 +1,4 @@
+/* 공통 UI를 출력하는 프레젠테이션 파일입니다. */
 .vertical.split-view {
     display: flex;
     flex-direction: column;

@@ -30,26 +30,35 @@ export default defineConfig({
         ],
 
         nav: [
-            { text: '웹 코더 가이드', link: '/guide/', activeMatch: '/guide/' },
+            { text: '웹 코더 가이드', link: '/guide/', activeMatch: '^/guide/' },
             { text: '웹 코더 개발자', link: '/maintainer' },
         ],
 
         sidebar: {
             '/guide/': [
                 {
-                    text: '사용자 가이드',
+                    text: '문서 홈',
+                    items: [{ text: '문서 시작하기', link: '/guide/' }],
+                },
+                {
+                    text: '사용자 문서',
                     items: [
-                        { text: '시작하기', link: '/guide/' },
-                        { text: '설치 및 빌드', link: '/guide/install' },
-                        { text: '사용 가이드', link: '/guide/usage' },
-                        { text: '기술 구조', link: '/guide/architecture' },
-                        { text: '문제 해결', link: '/guide/troubleshooting' },
+                        { text: '시작하기', link: '/guide/user/' },
+                        { text: '설치', link: '/guide/user/install' },
+                        { text: '사용 가이드', link: '/guide/user/usage' },
+                        { text: '문제 해결', link: '/guide/user/troubleshooting' },
                     ],
                 },
                 {
-                    text: '정책',
+                    text: '공통 문서',
+                    items: [{ text: '개인정보처리방침', link: '/guide/policy' }],
+                },
+                {
+                    text: '개발자 문서',
                     items: [
-                        { text: '개인정보처리방침', link: '/guide/policy' },
+                        { text: '개발자 시작하기', link: '/guide/developer/' },
+                        { text: '로컬 개발 및 빌드', link: '/guide/developer/setup' },
+                        { text: '기술 구조', link: '/guide/developer/architecture' },
                     ],
                 },
             ],

@@ -1,3 +1,4 @@
+// 공통으로 재사용하는 실행 로직과 도우미 함수를 담은 유틸 파일입니다.
 export const replaceSpaceAndNewlineToHtml = (string: string): string => {
     string = string.replace(/ /g, '&nbsp;');
     return string.replace(/(\r\n|\r|\n)/g, '<br>');

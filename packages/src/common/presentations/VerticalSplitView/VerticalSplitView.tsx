@@ -1,3 +1,4 @@
+// 공통 UI를 출력하는 프레젠테이션 파일입니다.
 import React, { useState, useRef, useEffect } from 'react';
 import { CSSProperties } from 'react';
 import './VerticalSplitView.css';

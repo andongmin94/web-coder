@@ -1,3 +1,4 @@
+// 여러 화면에서 공통으로 쓰는 상태 관리용 컨테이너 파일입니다.
 import React, { useState, useEffect, useRef, CSSProperties } from 'react';
 
 import './SolveViewWrapper.css';

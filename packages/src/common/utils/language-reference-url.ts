@@ -1,10 +1,9 @@
+// 공통으로 재사용하는 실행 로직과 도우미 함수를 담은 유틸 파일입니다.
 import { ReferenceLanguage } from '@/common/types/language';
 
 const referenceUrl: Record<ReferenceLanguage, string> = {
     cpp17: 'https://en.cppreference.com/w/cpp/17',
-    java11: 'https://docs.oracle.com/javase/11/docs/api/index.html',
     python: 'https://docs.python.org/3/index.html',
-    rust: 'https://doc.rust-lang.org/std/',
 };
 
 export const getReferenceUrl = (language: ReferenceLanguage): string => {
