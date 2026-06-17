@@ -29,6 +29,10 @@ export default defineManifest({
         service_worker: 'src/background.ts',
         type: 'module',
     },
+    // WebAssembly 기반 C++/Python 실행을 위해 확장 페이지에서 wasm 실행을 허용합니다.
+    content_security_policy: {
+        extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';",
+    },
     permissions: ['storage'],
     // 문제 조회와 제출 연동에 필요한 BOJ 도메인 접근 권한입니다.
     host_permissions: [

@@ -1,6 +1,4 @@
 // 백준 페이지에 직접 주입되어 동작을 시작하는 스크립트 파일입니다.
-import 'prism-code-editor/prism/languages/cpp';
-import 'prism-code-editor/prism/languages/python';
 import React from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { getProblemId } from '@/baekjoon/utils/parsing';
