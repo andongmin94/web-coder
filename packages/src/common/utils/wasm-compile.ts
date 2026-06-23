@@ -21,6 +21,8 @@ type WasmCommandResult = {
 const CLANG_WASM_PATH = 'wasm/clang.wasm';
 const WASM_LD_WASM_PATH = 'wasm/wasm-ld.wasm';
 const CLANG_BASE_FS_TAR_GZ_PATH = 'wasm/clang-fs.tar.gz';
+const CLANG_BUILTINS_WASM32_LIB_PATH =
+    '/sys/lib/clang/8.0.1/lib/wasi/libclang_rt.builtins-wasm32.a';
 const PYTHON_WASM_PATH = 'wasm/python-3.11.3.wasm';
 const PYTHON_BASE_FS_TAR_GZ_PATH = 'wasm/python-3.11.3.tar.gz';
 
@@ -110,6 +112,7 @@ const createClangPrepareCommands = (): WasmCommand[] => [
             '-lc',
             '-lc++',
             '-lc++abi',
+            CLANG_BUILTINS_WASM32_LIB_PATH,
             '-o',
             PROGRAM_WASM_PATH,
         ],

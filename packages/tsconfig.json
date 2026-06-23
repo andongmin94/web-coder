@@ -13,9 +13,9 @@
         "noEmitOnError": true,
         "jsx": "react",
         "typeRoots": ["node_modules/@types"],
-        "baseUrl": ".",
+        "types": ["chrome"],
         "paths": {
-            "@/*": ["src/*"]
+            "@/*": ["./src/*"]
         }
     },
     "include": ["src"]
