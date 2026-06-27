@@ -53,21 +53,15 @@ C++17과 Python 3은 확장 프로그램 내부의 WebAssembly 런타임으로 �
 
 ```text
 web-coder/
-├─ packages/                     # 실제 Chrome 확장 프로젝트
-│  ├─ src/
-│  │  ├─ main.ts                 # content script 진입점
-│  │  ├─ background.ts           # 실행 요청 처리
-│  │  ├─ manifest.ts             # Chrome MV3 매니페스트
-│  │  ├─ popup.tsx               # 확장 팝업 UI
-│  │  ├─ baekjoon/               # BOJ 전용 화면, API, 저장, 제출 로직
-│  │  └─ common/                 # 공통 타입, 유틸, 프레젠테이션, WASM 실행 유틸
-│  ├─ public/                    # 아이콘, 정적 리소스, WASM 에셋
-│  ├─ scripts/                   # 빌드 보조 스크립트
-│  └─ package.json
-├─ docs/                         # VitePress 기반 문서 사이트
-│  ├─ .vitepress/                # 문서 설정 및 테마
-│  ├─ guide/                     # 사용자/개발자 문서
-│  └─ public/                    # 문서용 정적 리소스
+├─ src/
+│  ├─ main.ts                    # content script 진입점
+│  ├─ background.ts              # 실행 요청 처리
+│  ├─ manifest.ts                # Chrome MV3 매니페스트
+│  ├─ popup.tsx                  # 확장 팝업 UI
+│  ├─ baekjoon/                  # BOJ 전용 화면, API, 저장, 제출 로직
+│  └─ common/                    # 공통 타입, 유틸, 프레젠테이션, WASM 실행 유틸
+├─ public/                       # 아이콘, 정적 리소스, WASM 에셋
+├─ scripts/                      # 빌드 보조 스크립트
 ├─ README.md
 └─ LICENSE.md
 ```
@@ -117,17 +111,16 @@ web-coder/
 ## 실행 방법
 
 ```bash
-cd packages
 npm install
 npm run build
 ```
 
-빌드 후 Chrome에서 `chrome://extensions`로 들어가 **개발자 모드**를 켠 뒤, `packages/dist`를 압축해제된 확장 프로그램으로 로드하면 됩니다.
+빌드 후 Chrome에서 `chrome://extensions`로 들어가 **개발자 모드**를 켠 뒤, `dist`를 압축해제된 확장 프로그램으로 로드하면 됩니다.
 
 ## 문서
 
 - 문서 사이트: <https://web-coder.andongmin.com>
-- 문서 소스: `docs/`
+- 문서 프로젝트는 이제 이 저장소 밖에서 별도로 관리합니다.
 
 ## 라이선스
 

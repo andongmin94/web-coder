@@ -1,0 +1,134 @@
+/* 확장 팝업 화면의 전체 스타일을 정의하는 파일입니다. */
+html,
+body {
+    margin: 0;
+    padding: 0;
+    width: 360px;
+    background: #f2f4f8;
+}
+
+body {
+    font-family: 'Segoe UI', sans-serif;
+}
+
+.popup-root {
+    padding: 14px;
+    background: #ffffff;
+    border: 1px solid #e4e8f0;
+    border-radius: 12px;
+    margin: 10px;
+    box-shadow: 0 8px 24px rgba(18, 29, 57, 0.08);
+}
+
+.popup-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.popup-logo {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    flex-shrink: 0;
+}
+
+.popup-root h1 {
+    margin: 0 0 4px;
+    font-size: 17px;
+    font-weight: 700;
+    color: #111827;
+}
+
+.popup-root .subtitle {
+    margin: 0;
+    color: #475467;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.popup-root .notice {
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: #fff4e5;
+    color: #9a3412;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.popup-root .settings-card {
+    margin: 0 0 12px;
+    padding: 12px;
+    border: 1px solid #d8dee8;
+    border-radius: 10px;
+    background: #f8fafc;
+}
+
+.popup-root .field-label {
+    display: block;
+    margin: 0 0 6px;
+    color: #344054;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.popup-root .text-input {
+    width: 100%;
+    margin: 0 0 10px;
+    padding: 9px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    box-sizing: border-box;
+    background: #ffffff;
+    color: #111827;
+    font-size: 12px;
+}
+
+.popup-root .button-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 2px;
+}
+
+.popup-root .primary-button,
+.popup-root .secondary-button {
+    border: 0;
+    border-radius: 8px;
+    padding: 9px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.popup-root .primary-button {
+    background: #111827;
+    color: #ffffff;
+}
+
+.popup-root .secondary-button {
+    background: #e5e7eb;
+    color: #1f2937;
+}
+
+.popup-root .primary-button:disabled,
+.popup-root .secondary-button:disabled {
+    opacity: 0.65;
+    cursor: default;
+}
+
+.popup-root .status-message {
+    margin: 10px 0 0;
+    color: #475467;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.popup-root .info-list {
+    margin: 0;
+    padding-left: 18px;
+    color: #344054;
+    font-size: 12px;
+    line-height: 1.5;
+}
