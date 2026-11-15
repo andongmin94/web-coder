@@ -1,7 +1,6 @@
 // 백준 전용 UI 조각을 구성하는 컴포넌트 파일입니다.
 import React from 'react';
 import './TestCaseResultElement.css';
-import { replaceSpaceAndNewlineToHtml } from '@/common/utils/string';
 
 const TestCaseResultElement: React.FC<TestCaseResultElementProps> = ({
     no,
@@ -11,23 +10,15 @@ const TestCaseResultElement: React.FC<TestCaseResultElementProps> = ({
     isMultiAnswer,
 }) => {
     return (
-        <div className='test-case-elem'>
+        <div className="test-case-elem">
             <h4>테스트{no}</h4>
             <p>
                 <span>입력값</span>
-                <span
-                    dangerouslySetInnerHTML={{
-                        __html: replaceSpaceAndNewlineToHtml(input),
-                    }}
-                ></span>
+                <span>{input}</span>
             </p>
             <p>
                 <span>기댓값</span>
-                <span
-                    dangerouslySetInnerHTML={{
-                        __html: replaceSpaceAndNewlineToHtml(expectedValue),
-                    }}
-                ></span>
+                <span>{expectedValue}</span>
             </p>
             {isMultiAnswer ? (
                 <></>
@@ -36,16 +27,14 @@ const TestCaseResultElement: React.FC<TestCaseResultElementProps> = ({
                     <span>실행 결과</span>
                     <span
                         className={
-                            output == expectedValue
-                                ? 'test-case-success'
-                                : 'test-case-wrong'
+                            output == expectedValue ? 'test-case-success' : 'test-case-wrong'
                         }
                     >
                         {output == undefined ? (
                             <span>
-                                <span className='loading-dot'></span>
-                                <span className='loading-dot'></span>
-                                <span className='loading-dot'></span>
+                                <span className="loading-dot"></span>
+                                <span className="loading-dot"></span>
+                                <span className="loading-dot"></span>
                             </span>
                         ) : output == expectedValue ? (
                             '테스트를 통과하였습니다.'
@@ -60,26 +49,18 @@ const TestCaseResultElement: React.FC<TestCaseResultElementProps> = ({
                     <span>출력</span>
                     {output == undefined ? (
                         <span>
-                            <span className='loading-dot'></span>
-                            <span className='loading-dot'></span>
-                            <span className='loading-dot'></span>
+                            <span className="loading-dot"></span>
+                            <span className="loading-dot"></span>
+                            <span className="loading-dot"></span>
                         </span>
                     ) : (
-                        <span
-                            dangerouslySetInnerHTML={{
-                                __html: replaceSpaceAndNewlineToHtml(output),
-                            }}
-                        ></span>
+                        <span>{output}</span>
                     )}
                 </p>
             ) : output == undefined || output == expectedValue ? null : (
                 <p>
                     <span>출력</span>
-                    <span
-                        dangerouslySetInnerHTML={{
-                            __html: replaceSpaceAndNewlineToHtml(output),
-                        }}
-                    ></span>
+                    <span>{output}</span>
                 </p>
             )}
         </div>

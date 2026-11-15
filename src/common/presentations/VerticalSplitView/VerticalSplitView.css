@@ -22,7 +22,13 @@
 
 .vertical.resizer {
     height: 5px;
+    flex-shrink: 0;
     cursor: row-resize;
     position: relative;
     background-color: #eee;
+}
+
+.vertical.resizer:focus-visible {
+    outline: 2px solid #1267f4;
+    outline-offset: -2px;
 }

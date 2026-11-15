@@ -22,6 +22,7 @@
 
 .test-case-elem p > span:nth-child(2) {
     width: 100%;
+    white-space: pre-wrap;
 }
 
 .test-case-success {
@@ -49,7 +50,12 @@
     border-radius: 50% !important;
     background-color: black;
     margin: 2px;
-    animation: pulse 1s infinite ease-in-out;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .loading-dot {
+        animation: pulse 1s infinite ease-in-out;
+    }
 }
 
 .loading-dot:nth-child(1) {

@@ -27,7 +27,9 @@ const LanguageSelectBox: React.FC<LanguageSelectBoxProps> = ({
                 marginRight: '10px',
             }}
         >
-            <a
+            <button
+                type="button"
+                className="btn btn-link"
                 onClick={onChangeDefaultLanguage}
                 style={{
                     cursor: 'pointer',
@@ -38,18 +40,19 @@ const LanguageSelectBox: React.FC<LanguageSelectBoxProps> = ({
                 }}
             >
                 현재 언어를 기본값으로 설정
-            </a>
+            </button>
             <label
-                className='control-label'
+                htmlFor="language"
+                className="control-label"
                 style={{ marginBottom: 0, lineHeight: '20px' }}
             >
                 언어
             </label>
             <div>
                 <select
-                    id='language'
-                    name='language'
-                    className='language-select chosen-select'
+                    id="language"
+                    name="language"
+                    className="language-select chosen-select"
                     value={value}
                     onChange={onChange}
                     onFocus={onFocus}
@@ -58,11 +61,7 @@ const LanguageSelectBox: React.FC<LanguageSelectBoxProps> = ({
                     }}
                 >
                     {options.map((option) => (
-                        <option
-                            key={option.id}
-                            value={option.id}
-                            data-mime={option.mime}
-                        >
+                        <option key={option.id} value={option.id} data-mime={option.mime}>
                             {option.label}
                         </option>
                     ))}

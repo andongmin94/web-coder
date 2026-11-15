@@ -1,5 +1,5 @@
 // 백준 화면에 표시할 순수 프레젠테이션 UI 파일입니다.
-import React from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import './Modal.css';
 
 type ModalProps = {
@@ -21,38 +21,41 @@ const Modal: React.FC<ModalProps> = ({
     modalOpen,
     onClose,
 }) => {
+    const dialogRef = useRef<HTMLDialogElement>(null);
+    const titleId = useId();
+    useEffect(() => {
+        const dialog = dialogRef.current!;
+        if (modalOpen && !dialog.open) dialog.showModal();
+        if (!modalOpen && dialog.open) dialog.close();
+    }, [modalOpen]);
+
     return (
-        <div
-            className='boj-modal-background'
-            style={modalOpen ? {} : { display: 'none' }}
+        <dialog
+            ref={dialogRef}
+            className="boj-modal"
+            aria-labelledby={titleId}
+            onCancel={(event) => {
+                event.preventDefault();
+                onClose();
+            }}
+            style={{ width, height }}
         >
-            <div
-                className='boj-modal'
-                style={{
-                    width: width,
-                    height: height,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    gap: '5px',
-                }}
-            >
-                <div className='modal-header'>
-                    <div className='modal-title' style={{ width: '100%' }}>
-                        {title}
-                    </div>
-                    <button
-                        type='button'
-                        className='boj-modal-close'
-                        onClick={onClose}
-                    >
-                        ×
-                    </button>
+            <div className="modal-header">
+                <div id={titleId} className="modal-title" style={{ width: '100%' }}>
+                    {title}
                 </div>
-                <div className='modal-body boj-modal-body'>{content}</div>
-                <div className='modal-footer'>{footer}</div>
+                <button
+                    type="button"
+                    className="boj-modal-close"
+                    aria-label="닫기"
+                    onClick={onClose}
+                >
+                    ×
+                </button>
             </div>
-        </div>
+            <div className="modal-body boj-modal-body">{content}</div>
+            <div className="modal-footer">{footer}</div>
+        </dialog>
     );
 };
 

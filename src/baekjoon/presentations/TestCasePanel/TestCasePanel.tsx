@@ -1,7 +1,6 @@
 // 백준 화면에 표시할 순수 프레젠테이션 UI 파일입니다.
 import TestCaseResultElement from '@/baekjoon/components/TestCaseResultElement/TestCaseResultElement';
 import { TestCase } from '@/baekjoon/types/problem';
-import { replaceSpaceAndNewlineToHtml } from '@/common/utils/string';
 import React from 'react';
 
 interface TestCasePanelProps {
@@ -10,11 +9,7 @@ interface TestCasePanelProps {
     errorMessage?: string;
 }
 
-const TestCasePanel: React.FC<TestCasePanelProps> = ({
-    testCases,
-    state,
-    errorMessage,
-}) => {
+const TestCasePanel: React.FC<TestCasePanelProps> = ({ testCases, state, errorMessage }) => {
     return (
         <div
             style={{
@@ -22,19 +17,13 @@ const TestCasePanel: React.FC<TestCasePanelProps> = ({
             }}
         >
             {state === 'initial' ? (
-                <p style={{ padding: '10px' }}>
-                    실행 결과가 여기에 표시됩니다.
-                </p>
+                <p style={{ padding: '10px' }}>실행 결과가 여기에 표시됩니다.</p>
             ) : state === 'error' && errorMessage ? (
                 <p
-                    className='test-case-panel-error-message'
+                    className="test-case-panel-error-message"
                     style={{ padding: '10px', color: 'red' }}
                 >
-                    <span
-                        dangerouslySetInnerHTML={{
-                            __html: replaceSpaceAndNewlineToHtml(errorMessage),
-                        }}
-                    ></span>
+                    <span style={{ whiteSpace: 'pre-wrap' }}>{errorMessage}</span>
                 </p>
             ) : (
                 testCases.map((testCase, index) => (

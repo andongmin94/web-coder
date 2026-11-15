@@ -20,7 +20,13 @@
 
 .horizontal.resizer {
     width: 5px;
+    flex-shrink: 0;
     cursor: col-resize;
     position: relative;
     background-color: #eee;
+}
+
+.horizontal.resizer:focus-visible {
+    outline: 2px solid #1267f4;
+    outline-offset: -2px;
 }

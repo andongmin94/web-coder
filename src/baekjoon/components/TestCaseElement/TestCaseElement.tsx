@@ -1,24 +1,18 @@
 // 백준 전용 UI 조각을 구성하는 컴포넌트 파일입니다.
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import './TestCaseElement.css';
 import { TestCase } from '@/baekjoon/types/problem';
 
-const TestCaseElement: React.FC<TestCaseElementProps> = ({
-    no,
-    testCase,
-    disabled,
-    onDelete,
-}) => {
+const TestCaseElement: React.FC<TestCaseElementProps> = ({ no, testCase, disabled, onDelete }) => {
+    const inputLabelId = useId();
+    const outputLabelId = useId();
     const [rows, setRows] = useState(getOptimalRows());
     const resize = () => {
         setRows(getOptimalRows());
     };
 
     function getOptimalRows() {
-        return Math.max(
-            testCase.input.split('\n').length,
-            testCase.output.split('\n').length
-        );
+        return Math.max(testCase.input.split('\n').length, testCase.output.split('\n').length);
     }
 
     return (
@@ -30,11 +24,12 @@ const TestCaseElement: React.FC<TestCaseElementProps> = ({
                 margin: '10px 0',
             }}
         >
-            <section className='test-case-element'>
-                <div className='headline'>
-                    <h2>예제 입력 {no}</h2>
+            <section className="test-case-element">
+                <div className="headline">
+                    <h2 id={inputLabelId}>예제 입력 {no}</h2>
                 </div>
                 <textarea
+                    aria-labelledby={inputLabelId}
                     style={disabled ? {} : { background: '#fff' }}
                     disabled={disabled}
                     rows={rows}
@@ -43,18 +38,18 @@ const TestCaseElement: React.FC<TestCaseElementProps> = ({
                         testCase.input = event.target.value;
                         resize();
                     }}
-                    spellCheck='false'
+                    spellCheck="false"
                 ></textarea>
             </section>
-            <section className='test-case-element'>
+            <section className="test-case-element">
                 <div
-                    className='headline'
+                    className="headline"
                     style={{ display: 'flex', justifyContent: 'space-between' }}
                 >
-                    <h2>예제 출력 {no}</h2>
+                    <h2 id={outputLabelId}>예제 출력 {no}</h2>
                     {disabled ? null : (
                         <button
-                            className='btn btn-link'
+                            className="btn btn-link"
                             onClick={() => {
                                 testCase.uuid && onDelete?.(testCase.uuid);
                             }}
@@ -64,6 +59,7 @@ const TestCaseElement: React.FC<TestCaseElementProps> = ({
                     )}
                 </div>
                 <textarea
+                    aria-labelledby={outputLabelId}
                     style={disabled ? {} : { background: '#fff' }}
                     disabled={disabled}
                     rows={rows}
@@ -72,7 +68,7 @@ const TestCaseElement: React.FC<TestCaseElementProps> = ({
                         testCase.output = event.target.value;
                         resize();
                     }}
-                    spellCheck='false'
+                    spellCheck="false"
                 ></textarea>
             </section>
         </div>

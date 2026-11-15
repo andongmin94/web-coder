@@ -1,24 +1,25 @@
 /* 백준 화면에 표시할 순수 프레젠테이션 UI 파일입니다. */
-.boj-modal-background {
+.boj-modal::backdrop {
     background-color: rgba(0, 0, 0, 0.4);
-    width: 100%;
-    height: 100%;
-    z-index: 1000;
-    position: fixed;
-    top: 0;
-    left: 0;
 }
 
 .boj-modal {
-    z-index: 1001;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
+    margin: auto;
+    border: 0;
+    max-width: calc(100vw - 2rem);
+    max-height: calc(100dvh - 2rem);
+    color: inherit;
     box-shadow: 5px 5px 10px 2px rgba(0, 0, 0, 0.5);
     border-radius: 10px !important;
     background-color: white;
     padding: 10px;
+}
+
+.boj-modal[open] {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 5px;
 }
 
 .boj-modal-close {
