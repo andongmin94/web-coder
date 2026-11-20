@@ -1,7 +1,7 @@
-// 드래그로 패널 크기 조절 (문제|작업 영역, 에디터/테스트)
+// 드래그(또는 방향키)로 패널 너비 조절: 문제 | 에디터 | 결과
 import { storage, type Prefs } from './storage.ts';
 
-const clamp = (v: number) => Math.min(0.8, Math.max(0.2, v));
+const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 
 const drag = (gutter: HTMLElement, onMove: (e: PointerEvent) => void, onEnd: () => void) => {
     gutter.addEventListener('pointerdown', (start) => {
@@ -24,57 +24,46 @@ const drag = (gutter: HTMLElement, onMove: (e: PointerEvent) => void, onEnd: () 
 
 export const setupSplit = (prefs: Prefs) => {
     const root = document.documentElement;
-    const app = document.getElementById('app')!;
-    const work = document.getElementById('work-pane')!;
-    let problemRatio = prefs.problemRatio ?? 0.42;
-    let editorRatio = prefs.editorRatio ?? 0.6;
+    const panes = document.getElementById('panes')!;
+    let problem = prefs.problemRatio ?? 0.34;
+    let results = prefs.resultsRatio ?? 0.3;
 
     const apply = () => {
-        root.style.setProperty('--problem-ratio', String(problemRatio));
-        root.style.setProperty('--editor-ratio', String(editorRatio));
+        root.style.setProperty('--problem-width', `${(problem * 100).toFixed(2)}%`);
+        root.style.setProperty('--results-width', `${(results * 100).toFixed(2)}%`);
     };
     apply();
+    const save = () => void storage.updatePrefs({ problemRatio: problem, resultsRatio: results });
 
-    const save = () => void storage.updatePrefs({ problemRatio, editorRatio });
+    const problemGutter = document.getElementById('gutter-problem')!;
+    const resultsGutter = document.getElementById('gutter-results')!;
 
-    const colGutter = document.getElementById('gutter-col');
-    const rowGutter = document.getElementById('gutter-row');
+    drag(
+        problemGutter,
+        (e) => {
+            const rect = panes.getBoundingClientRect();
+            problem = clamp((e.clientX - rect.left) / rect.width, 0.15, 0.6);
+            apply();
+        },
+        save
+    );
+    drag(
+        resultsGutter,
+        (e) => {
+            const rect = panes.getBoundingClientRect();
+            results = clamp((rect.right - e.clientX) / rect.width, 0.18, 0.5);
+            apply();
+        },
+        save
+    );
 
-    if (colGutter) {
-        drag(
-            colGutter,
-            (e) => {
-                const rect = app.getBoundingClientRect();
-                problemRatio = clamp((e.clientX - rect.left) / rect.width);
-                apply();
-            },
-            save
-        );
-        colGutter.addEventListener('keydown', (e) => {
+    const keys = (gutter: HTMLElement, change: (delta: number) => void) =>
+        gutter.addEventListener('keydown', (e) => {
             if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-            problemRatio = clamp(problemRatio + (e.key === 'ArrowLeft' ? -0.02 : 0.02));
+            change(e.key === 'ArrowLeft' ? -0.02 : 0.02);
             apply();
             save();
         });
-    }
-
-    if (rowGutter) {
-        drag(
-            rowGutter,
-            (e) => {
-                const toolbar = document.getElementById('toolbar')!;
-                const top = toolbar.getBoundingClientRect().bottom;
-                const rect = work.getBoundingClientRect();
-                editorRatio = clamp((e.clientY - top) / (rect.bottom - top));
-                apply();
-            },
-            save
-        );
-        rowGutter.addEventListener('keydown', (e) => {
-            if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
-            editorRatio = clamp(editorRatio + (e.key === 'ArrowUp' ? -0.02 : 0.02));
-            apply();
-            save();
-        });
-    }
+    keys(problemGutter, (d) => (problem = clamp(problem + d, 0.15, 0.6)));
+    keys(resultsGutter, (d) => (results = clamp(results - d, 0.18, 0.5)));
 };

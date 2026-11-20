@@ -1,5 +1,5 @@
-// 테스트 케이스 목록과 결과 표시
-import { firstDiffLine, isSameOutput } from '../judge/judge.ts';
+// 테스트 목록: 예제별로 접히는 행 + 실패 시 줄 단위 비교
+import { isSameOutput, normalizeOutput } from '../judge/judge.ts';
 import type { RunResult } from '../runner/types.ts';
 import { h } from './dom.ts';
 
@@ -15,7 +15,7 @@ export type TestState =
     | { phase: 'idle' }
     | { phase: 'queued' }
     | { phase: 'running' }
-    | { phase: 'compile-error' }
+    | { phase: 'skipped' }
     | { phase: 'done'; result: RunResult };
 
 export type Verdict = 'pass' | 'fail' | 'output' | 'error' | 'timeout' | 'olimit' | 'cancelled';
@@ -29,29 +29,77 @@ export const verdictOf = (test: TestCase, result: RunResult, specialJudge: boole
     return isSameOutput(result.output.stdout, test.expected) ? 'pass' : 'fail';
 };
 
-const VERDICT_TEXT: Record<Verdict, string> = {
-    pass: '통과',
-    fail: '틀림',
-    output: '실행됨',
-    error: '런타임 에러',
-    timeout: '시간 초과',
-    olimit: '출력 초과',
-    cancelled: '중단됨',
+export const isBadVerdict = (v: Verdict) =>
+    v === 'fail' || v === 'error' || v === 'timeout' || v === 'olimit';
+
+const VERDICT: Record<Verdict, { text: string; icon: string }> = {
+    pass: { text: '통과', icon: '✓' },
+    fail: { text: '틀렸습니다', icon: '✕' },
+    output: { text: '실행됨', icon: '•' },
+    error: { text: '런타임 에러', icon: '!' },
+    timeout: { text: '시간 초과', icon: '⏱' },
+    olimit: { text: '출력 초과', icon: '!' },
+    cancelled: { text: '중단됨', icon: '–' },
 };
 
 type Callbacks = {
+    onToggle: (id: string) => void;
     onChangeCustom: (id: string, patch: { input?: string; expected?: string }) => void;
     onDeleteCustom: (id: string) => void;
 };
 
-const block = (title: string, content: string, extra?: string) =>
-    h('div', { class: `io-block ${extra ?? ''}` }, [
-        h('div', { class: 'io-title' }, title),
-        h('pre', { class: 'io-pre' }, content.length ? content : ' '),
+const MAX_LINES = 400;
+
+const plainBlock = (label: string | Node[], text: string, extraClass = '') =>
+    h('div', { class: `io ${extraClass}` }, [
+        h('div', { class: 'io-label' }, label),
+        h('pre', {}, text.length ? text.replace(/\n$/, '') : ' '),
     ]);
 
-const editableBlock = (
-    title: string,
+/** 기대/실제 출력을 줄 단위로 비교해 다른 줄을 강조합니다. */
+const diffBlocks = (expected: string, actual: string) => {
+    const e = normalizeOutput(expected).split('\n');
+    const a = normalizeOutput(actual).split('\n');
+    const rows = Math.max(e.length, a.length);
+    let firstDiff = -1;
+    for (let i = 0; i < rows; i++) {
+        if (e[i] !== a[i]) {
+            firstDiff = i;
+            break;
+        }
+    }
+    const render = (lines: string[], other: string[], badClass: string) => {
+        const pre = h('pre');
+        const shown = Math.min(lines.length, MAX_LINES);
+        for (let i = 0; i < shown; i++) {
+            pre.append(
+                h(
+                    'span',
+                    { class: `diff-line ${lines[i] !== other[i] ? badClass : ''}` },
+                    lines[i] || ' '
+                )
+            );
+        }
+        if (lines.length > shown)
+            pre.append(h('span', { class: 'diff-line' }, `… ${lines.length - shown}줄 더`));
+        return pre;
+    };
+    const note =
+        firstDiff >= 0 ? h('span', { class: 'note' }, `${firstDiff + 1}번째 줄부터 다름`) : null;
+    return [
+        h('div', { class: 'io' }, [
+            h('div', { class: 'io-label' }, ['실제 출력', note]),
+            render(a, e, 'diff-bad'),
+        ]),
+        h('div', { class: 'io' }, [
+            h('div', { class: 'io-label' }, '기대 출력'),
+            render(e, a, 'diff-miss'),
+        ]),
+    ];
+};
+
+const editable = (
+    label: string,
     value: string,
     placeholder: string,
     onInput: (v: string) => void
@@ -59,99 +107,135 @@ const editableBlock = (
     const area = h('textarea', { class: 'io-edit', spellcheck: 'false', placeholder, rows: 3 });
     area.value = value;
     area.addEventListener('input', () => onInput(area.value));
-    return h('div', { class: 'io-block' }, [h('div', { class: 'io-title' }, title), area]);
+    return h('div', { class: 'io' }, [h('div', { class: 'io-label' }, label), area]);
 };
 
-export const renderTestCard = (
+export const renderTest = (
     test: TestCase,
     state: TestState,
+    open: boolean,
     specialJudge: boolean,
     callbacks: Callbacks
 ): HTMLElement => {
-    let badge: HTMLElement;
-    let resultNode: HTMLElement | null = null;
+    let icon: HTMLElement;
+    let verdictText: HTMLElement;
+    let time: string | null = null;
+    let verdict: Verdict | null = null;
 
     switch (state.phase) {
         case 'idle':
-            badge = h('span', { class: 'badge' }, '대기');
+        case 'skipped':
+            icon = h('span', { class: 'test-icon' }, '');
+            verdictText = h(
+                'span',
+                { class: 'test-verdict verdict-muted' },
+                state.phase === 'skipped' ? '실행 안 함' : ''
+            );
             break;
         case 'queued':
-            badge = h('span', { class: 'badge badge-muted' }, '대기 중');
+            icon = h('span', { class: 'test-icon' }, '');
+            verdictText = h('span', { class: 'test-verdict verdict-muted' }, '대기');
             break;
         case 'running':
-            badge = h('span', { class: 'badge badge-running' }, '실행 중');
+            icon = h('span', { class: 'spinner', 'aria-hidden': 'true' });
+            verdictText = h('span', { class: 'test-verdict verdict-muted' }, '실행 중');
             break;
-        case 'compile-error':
-            badge = h('span', { class: 'badge badge-error' }, '컴파일 에러');
+        case 'done':
+            verdict = verdictOf(test, state.result, specialJudge);
+            icon = h('span', { class: `test-icon icon-${verdict}` }, VERDICT[verdict].icon);
+            verdictText = h(
+                'span',
+                { class: `test-verdict verdict-${verdict}` },
+                VERDICT[verdict].text
+            );
+            if (verdict !== 'timeout' && verdict !== 'cancelled')
+                time = `${Math.round(state.result.timeMs)}ms`;
             break;
-        case 'done': {
-            const verdict = verdictOf(test, state.result, specialJudge);
-            const time =
-                verdict === 'timeout' || verdict === 'cancelled'
-                    ? ''
-                    : ` · ${Math.round(state.result.timeMs)}ms`;
-            badge = h('span', { class: `badge badge-${verdict}` }, VERDICT_TEXT[verdict] + time);
-
-            const { stdout, stderr, exitCode } = state.result.output;
-            const diffLine = verdict === 'fail' ? firstDiffLine(stdout, test.expected) : null;
-            resultNode = h('div', { class: 'io-result' }, [
-                verdict !== 'cancelled' &&
-                    block(
-                        diffLine ? `실제 출력 (${diffLine}번째 줄부터 다름)` : '실제 출력',
-                        stdout,
-                        verdict === 'fail' ? 'io-wrong' : verdict === 'pass' ? 'io-right' : ''
-                    ),
-                stderr.trim() && block('표준 에러', stderr, 'io-stderr'),
-                verdict === 'error' &&
-                    h('p', { class: 'io-note' }, state.result.message ?? `종료 코드 ${exitCode}`),
-                verdict === 'timeout' &&
-                    h(
-                        'p',
-                        { class: 'io-note' },
-                        `로컬 실행 제한 ${Math.round(state.result.timeMs / 1000)}초를 넘어 중단했습니다.`
-                    ),
-                state.result.output.truncated &&
-                    h('p', { class: 'io-note' }, '출력이 1MB를 넘어 잘랐습니다.'),
-            ]);
-            break;
-        }
     }
 
-    const header = h('div', { class: 'test-header' }, [
-        h('span', { class: 'test-label' }, test.label),
-        badge,
-        test.kind === 'custom' &&
-            h(
-                'button',
-                {
-                    class: 'icon-button',
-                    type: 'button',
-                    title: '테스트 삭제',
-                    'aria-label': `${test.label} 삭제`,
-                    onclick: () => callbacks.onDeleteCustom(test.id),
-                },
-                '✕'
+    const row = h(
+        'button',
+        {
+            class: 'test-row',
+            type: 'button',
+            'aria-expanded': String(open),
+            onclick: () => callbacks.onToggle(test.id),
+        },
+        [
+            icon,
+            h('span', { class: 'test-name' }, test.label),
+            verdictText,
+            h('span', { class: 'test-time' }, time ?? ''),
+            h('span', { class: 'chevron', 'aria-hidden': 'true' }, '›'),
+        ]
+    );
+
+    const card = h('article', {
+        class: `test ${open ? 'open' : ''} ${verdict && isBadVerdict(verdict) ? 'is-fail' : ''}`,
+        'data-id': test.id,
+    });
+    card.append(row);
+    if (!open) return card;
+
+    const body = h('div', { class: 'test-body' });
+    if (test.kind === 'custom') {
+        body.append(
+            editable('입력', test.input, '입력값', (v) =>
+                callbacks.onChangeCustom(test.id, { input: v })
             ),
-    ]);
+            editable('기대 출력', test.expected, '비우면 비교하지 않고 출력만 봅니다', (v) =>
+                callbacks.onChangeCustom(test.id, { expected: v })
+            )
+        );
+    } else {
+        body.append(plainBlock('입력', test.input));
+    }
 
-    const io =
-        test.kind === 'custom'
-            ? h('div', { class: 'io-grid' }, [
-                  editableBlock('입력', test.input, '입력값', (v) =>
-                      callbacks.onChangeCustom(test.id, { input: v })
-                  ),
-                  editableBlock('기대 출력', test.expected, '비우면 비교하지 않음', (v) =>
-                      callbacks.onChangeCustom(test.id, { expected: v })
-                  ),
-              ])
-            : h('div', { class: 'io-grid' }, [
-                  block('입력', test.input),
-                  block('기대 출력', test.expected),
-              ]);
+    if (state.phase === 'done') {
+        const { stdout, stderr } = state.result.output;
+        if (verdict === 'fail') {
+            body.append(...diffBlocks(test.expected, stdout));
+        } else if (verdict !== 'cancelled') {
+            if (test.kind === 'sample' && verdict !== 'pass')
+                body.append(plainBlock('기대 출력', test.expected));
+            body.append(plainBlock('실제 출력', stdout));
+        }
+        if (stderr.trim()) body.append(plainBlock('표준 에러', stderr, 'io-stderr'));
+        if (verdict === 'error' && state.result.message)
+            body.append(h('p', { class: 'io-note' }, state.result.message));
+        if (verdict === 'error' && !stderr.trim() && !state.result.message) {
+            body.append(h('p', { class: 'io-note' }, `종료 코드 ${state.result.output.exitCode}`));
+        }
+        if (verdict === 'timeout') {
+            body.append(
+                h(
+                    'p',
+                    { class: 'io-note' },
+                    `로컬 실행 제한 ${Math.round(state.result.timeMs / 1000)}초를 넘어 중단했습니다.`
+                )
+            );
+        }
+        if (state.result.output.truncated)
+            body.append(h('p', { class: 'io-note' }, '출력이 1MB를 넘어 잘랐습니다.'));
+    } else if (test.kind === 'sample') {
+        body.append(plainBlock('기대 출력', test.expected));
+    }
 
-    return h('article', { class: `test-card phase-${state.phase}`, 'data-id': test.id }, [
-        header,
-        io,
-        resultNode,
-    ]);
+    if (test.kind === 'custom') {
+        body.append(
+            h('div', {}, [
+                h(
+                    'button',
+                    {
+                        class: 'btn btn-ghost btn-sm test-remove',
+                        type: 'button',
+                        onclick: () => callbacks.onDeleteCustom(test.id),
+                    },
+                    '이 테스트 삭제'
+                ),
+            ])
+        );
+    }
+    card.append(body);
+    return card;
 };

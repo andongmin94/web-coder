@@ -4,8 +4,8 @@ export type Prefs = {
     lastLanguageLabel?: string;
     /** 문제 패널 너비 비율 (0~1) */
     problemRatio?: number;
-    /** 에디터 높이 비율 (0~1) */
-    editorRatio?: number;
+    /** 결과 패널 너비 비율 (0~1) */
+    resultsRatio?: number;
 };
 
 export type CustomTest = { id: string; input: string; expected: string };

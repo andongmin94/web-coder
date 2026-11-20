@@ -8,61 +8,121 @@
     </head>
     <body>
         <div id="app">
-            <section id="problem-pane" aria-label="문제">
-                <p class="empty">문제를 불러오는 중…</p>
-            </section>
-            <div
-                id="gutter-col"
-                class="gutter gutter-col"
-                role="separator"
-                aria-orientation="vertical"
-                aria-label="문제 패널 너비 조절"
-                tabindex="0"
-            ></div>
-            <section id="work-pane" aria-label="코드 작성">
-                <div id="toolbar" class="toolbar">
-                    <select id="language" aria-label="언어"></select>
-                    <button id="run" class="button button-primary" type="button" title="Ctrl+Enter">
-                        실행
-                    </button>
-                    <button id="stop" class="button" type="button" hidden>중단</button>
+            <header class="topbar">
+                <div class="topbar-title">
+                    <span class="brand" aria-hidden="true">WC</span>
+                    <a
+                        id="problem-link"
+                        class="problem-id"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    ></a>
+                    <span id="problem-title" class="problem-title"></span>
+                    <span id="problem-limits" class="limits"></span>
+                </div>
+
+                <div class="topbar-actions">
+                    <select id="language" class="select" aria-label="언어"></select>
                     <button
-                        id="submit"
-                        class="button button-accent"
+                        id="run"
+                        class="btn btn-primary"
                         type="button"
-                        title="Ctrl+Shift+Enter"
+                        title="예제 실행 (Ctrl+Enter)"
                     >
-                        제출
+                        <span aria-hidden="true">▶</span> 실행 <kbd>Ctrl ↵</kbd>
                     </button>
-                    <select id="code-open" aria-label="소스 코드 공개"></select>
-                    <span class="spacer"></span>
-                    <button id="reset" class="button button-ghost" type="button">템플릿으로</button>
-                    <button id="native" class="button button-ghost" type="button">
-                        기본 제출 폼
+                    <button id="stop" class="btn btn-danger-soft" type="button" hidden>
+                        <span aria-hidden="true">■</span> 중단
+                    </button>
+                    <span class="divider" aria-hidden="true"></span>
+                    <div class="anchor">
+                        <button
+                            id="submit"
+                            class="btn btn-submit"
+                            type="button"
+                            title="BOJ에 제출 (Ctrl+Shift+Enter)"
+                        >
+                            제출
+                        </button>
+                        <div
+                            id="confirm"
+                            class="popover"
+                            role="dialog"
+                            aria-labelledby="confirm-text"
+                            hidden
+                        >
+                            <p id="confirm-text"></p>
+                            <div class="popover-actions">
+                                <button id="confirm-cancel" class="btn" type="button">취소</button>
+                                <button id="confirm-ok" class="btn btn-submit" type="button">
+                                    그래도 제출
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="anchor">
+                        <button
+                            id="more"
+                            class="btn btn-icon"
+                            type="button"
+                            aria-haspopup="menu"
+                            aria-expanded="false"
+                            title="더 보기"
+                        >
+                            ⋯
+                        </button>
+                        <div id="menu" class="menu" role="menu" hidden>
+                            <label class="menu-row">
+                                <span>소스 코드 공개</span>
+                                <select id="code-open" class="select select-sm"></select>
+                            </label>
+                            <button id="reset" class="menu-item" type="button" role="menuitem">
+                                템플릿으로 초기화
+                            </button>
+                            <div class="menu-hint">
+                                <div><kbd>Ctrl ↵</kbd> 실행</div>
+                                <div><kbd>Ctrl Shift ↵</kbd> 제출</div>
+                            </div>
+                        </div>
+                    </div>
+                    <button id="close" class="btn btn-icon" type="button" title="BOJ 기본 화면으로">
+                        ✕
                     </button>
                 </div>
-                <div id="editor"></div>
+            </header>
+
+            <main id="panes">
+                <section id="problem-pane" class="pane" aria-label="문제"></section>
                 <div
-                    id="gutter-row"
-                    class="gutter gutter-row"
+                    id="gutter-problem"
+                    class="gutter"
                     role="separator"
-                    aria-orientation="horizontal"
-                    aria-label="에디터 높이 조절"
+                    aria-orientation="vertical"
+                    aria-label="문제 패널 너비"
                     tabindex="0"
                 ></div>
-                <div id="tests-pane">
-                    <div class="tests-header">
-                        <strong>테스트</strong>
-                        <span id="test-summary" class="test-summary" aria-live="polite"></span>
-                        <span class="spacer"></span>
-                        <button id="add-test" class="button button-ghost" type="button">
-                            + 테스트 추가
+                <section id="editor-pane" class="pane" aria-label="코드">
+                    <div id="editor"></div>
+                </section>
+                <div
+                    id="gutter-results"
+                    class="gutter"
+                    role="separator"
+                    aria-orientation="vertical"
+                    aria-label="결과 패널 너비"
+                    tabindex="0"
+                ></div>
+                <section id="results-pane" class="pane" aria-label="실행 결과">
+                    <div class="results-head">
+                        <div id="status" class="status" aria-live="polite"></div>
+                        <button id="add-test" class="btn btn-ghost btn-sm" type="button">
+                            + 테스트
                         </button>
                     </div>
                     <div id="compile-box" class="compile-box" hidden></div>
-                    <div id="test-list"></div>
-                </div>
-            </section>
+                    <div id="test-list" class="test-list"></div>
+                </section>
+            </main>
         </div>
         <div id="toast" class="toast" role="status"></div>
         <script src="solver.js"></script>

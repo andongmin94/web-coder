@@ -25,16 +25,20 @@ const injectStyle = () => {
     style.id = 'webcoder-style';
     style.textContent = `
         .${HIDDEN_CLASS} { display: none !important; }
-        #${ROOT_ID} { width: 100%; margin: 0 0 16px; }
-        #${ROOT_ID} iframe {
-            display: block; width: 100%; border: 1px solid #ddd; border-radius: 6px;
-            height: max(640px, calc(100vh - 120px));
+        html.webcoder-open-page, html.webcoder-open-page body { overflow: hidden !important; }
+        /* BOJ 화면 위를 꽉 채우는 작업 공간 (reCAPTCHA 배지 등 고정 요소보다 위) */
+        #${ROOT_ID} {
+            position: fixed; inset: 0; z-index: 2147483647;
+            background: #fff; color-scheme: light dark;
         }
+        @media (prefers-color-scheme: dark) { #${ROOT_ID} { background: #1b1e23; } }
+        #${ROOT_ID} iframe { display: block; width: 100%; height: 100%; border: 0; }
         .webcoder-open {
             display: inline-flex; align-items: center; gap: 6px; margin: 0 0 12px;
-            padding: 6px 12px; border: 1px solid #0076c0; border-radius: 4px;
-            background: #fff; color: #0076c0; font-weight: 600; cursor: pointer;
+            padding: 8px 14px; border: 0; border-radius: 6px;
+            background: #0b6bcb; color: #fff; font-weight: 600; cursor: pointer;
         }
+        .webcoder-open:hover { background: #0a5cad; }
         .webcoder-notice {
             margin: 0 0 12px; padding: 10px 12px; border-radius: 4px;
             background: #fff8e1; border: 1px solid #f0c36d; color: #5d4500;
@@ -132,6 +136,7 @@ const showNativeForm = (notice?: string) => {
     removeListener?.();
     removeListener = null;
     document.getElementById(ROOT_ID)?.remove();
+    document.documentElement.classList.remove('webcoder-open-page');
     const form = getForm();
     if (!form) return;
     form.classList.remove(HIDDEN_CLASS);
@@ -170,12 +175,9 @@ const mount = async () => {
     iframe.title = '웹 코더';
     iframe.allow = 'clipboard-read; clipboard-write';
     root.appendChild(iframe);
-    form.before(root);
+    document.body.appendChild(root);
+    document.documentElement.classList.add('webcoder-open-page');
     form.classList.add(HIDDEN_CLASS);
-
-    // 본문 컨테이너를 넓혀 분할 화면에 여유를 줍니다.
-    const container = form.closest<HTMLElement>('.container');
-    if (container) container.style.width = '100%';
 
     const formDataPromise = readFormData(form);
     // 문제 페이지를 열 때 저장해 둔 데이터를 먼저 쓰고, 없으면 직접 받아 봅니다.

@@ -17,26 +17,16 @@ DOMPurify.addHook('afterSanitizeAttributes', (node) => {
     }
 });
 
-export const renderProblem = (container: HTMLElement, problem: ProblemData) => {
-    const limits = h('div', { class: 'problem-limits' }, [
+/** 상단 바용 제한 칩 */
+export const limitChips = (problem: ProblemData) =>
+    [
         problem.limitText.time && h('span', { class: 'chip' }, `시간 ${problem.limitText.time}`),
         problem.limitText.memory &&
             h('span', { class: 'chip' }, `메모리 ${problem.limitText.memory}`),
         problem.isSpecialJudge && h('span', { class: 'chip chip-warn' }, '스페셜 저지'),
-    ]);
+    ].filter((el): el is HTMLSpanElement => Boolean(el));
 
-    const header = h('header', { class: 'problem-header' }, [
-        h('h1', {}, [
-            h(
-                'a',
-                { href: problem.url, target: '_blank', rel: 'noopener noreferrer' },
-                `${problem.id}번`
-            ),
-            ` ${problem.title}`,
-        ]),
-        limits,
-    ]);
-
+export const renderProblem = (container: HTMLElement, problem: ProblemData) => {
     const body = h('div', { class: 'problem-body' });
     for (const section of problem.sections) {
         const content = h('div', { class: 'problem-section-content' });
@@ -45,8 +35,8 @@ export const renderProblem = (container: HTMLElement, problem: ProblemData) => {
             h('section', { class: 'problem-section' }, [h('h2', {}, section.title), content])
         );
     }
-
-    container.replaceChildren(header, body);
+    container.replaceChildren(body);
+    container.scrollTop = 0;
 
     try {
         renderMathInElement(body, {
@@ -64,11 +54,27 @@ export const renderProblem = (container: HTMLElement, problem: ProblemData) => {
     }
 };
 
-export const renderProblemError = (container: HTMLElement, message: string, url: string) => {
+/** 문제 데이터가 아직 없을 때: BOJ는 문제 페이지를 직접 열어야 본문을 줍니다. */
+export const renderProblemMissing = (container: HTMLElement, url: string) => {
     container.replaceChildren(
-        h('div', { class: 'empty' }, [
-            h('p', {}, message),
-            h('a', { href: url, target: '_blank', rel: 'noopener noreferrer' }, '문제 페이지 열기'),
+        h('div', { class: 'notice-card' }, [
+            h('strong', {}, '문제 본문이 아직 없습니다'),
+            h(
+                'span',
+                {},
+                '문제 페이지를 한 번 열면 본문과 예제가 저장되어 여기에 바로 나타납니다.'
+            ),
+            h('br'),
+            h(
+                'a',
+                {
+                    class: 'btn btn-primary',
+                    href: url,
+                    target: '_blank',
+                    rel: 'noopener noreferrer',
+                },
+                '문제 페이지 열기'
+            ),
         ])
     );
 };
