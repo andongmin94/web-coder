@@ -126,9 +126,40 @@ const buildPch = async (std: string) => {
     await putPch(key, pch);
 };
 
+/**
+ * 인텔리센스용 분석: -fsyntax-only로 진단, -code-completion-at으로 자동완성/시그니처.
+ * 링크 단계가 없어 PCH가 있으면 수십~수백 ms 안에 끝납니다.
+ */
+const analyze = async (source: string, std: string, extra: string[]) => {
+    const usePch = usesBitsStdcxx(source);
+    const pch = usePch ? await loadPch(std) : undefined;
+    const files: Tree = { 'main.cpp': source, ...headerTree() };
+    const args = [...commonFlags(std)];
+    if (pch) {
+        files['stdcxx.pch'] = pch;
+        args.push('-Xclang', '-fno-validate-pch', '-include-pch', 'stdcxx.pch');
+    }
+    args.push('-fsyntax-only', ...extra, 'main.cpp');
+    const result = await clang(args, files);
+    return { output: result.diagnostics, needsPch: usePch && !pch };
+};
+
 self.addEventListener('message', async (event: MessageEvent<CompilerRequest>) => {
     const req = event.data;
     try {
+        if (req.type === 'complete') {
+            const extra = ['-Xclang', `-code-completion-at=main.cpp:${req.line}:${req.col}`];
+            // 멤버 접근(. -> ::)일 때는 전역 이름 목록이 필요 없어 훨씬 빠릅니다.
+            if (req.memberOnly) extra.push('-Xclang', '-no-code-completion-ns-level-decls');
+            const res = await analyze(req.source, req.std, extra);
+            reply({ type: 'intel', id: req.id, ...res });
+            return;
+        }
+        if (req.type === 'diagnose') {
+            const res = await analyze(req.source, req.std, []);
+            reply({ type: 'intel', id: req.id, ...res });
+            return;
+        }
         if (req.type === 'warmup') {
             // 첫 호출에서 llvm.core.wasm(약 74MB)과 sysroot를 받아 컴파일해 둡니다.
             await clang(['--version'], {});

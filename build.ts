@@ -119,7 +119,60 @@ const entries: esbuild.BuildOptions[] = [
         format: 'esm',
         define: { COMPILER_VERSION: JSON.stringify(clangPkg.version) },
     },
+    {
+        // node.js 인텔리센스: TypeScript 언어 서비스. Node 전용 분기의 require는 브라우저에서 실행되지 않습니다.
+        entryPoints: { 'intel/ts-worker': 'src/intel/ts-worker.ts' },
+        external: [
+            'node:*',
+            'fs',
+            'path',
+            'os',
+            'crypto',
+            'inspector',
+            'perf_hooks',
+            'module',
+            'source-map-support',
+            'buffer',
+            'util',
+        ],
+    },
 ];
+
+/** TypeScript 표준 라이브러리 타입(lib.es2022 계열)을 하나의 JSON으로 */
+const buildTsLibs = async () => {
+    const dir = 'node_modules/typescript-js/lib';
+    const libs: Record<string, string> = {};
+    const visit = async (name: string) => {
+        if (libs[name]) return;
+        const text = await readFile(`${dir}/${name}`, 'utf8');
+        libs[name] = text;
+        for (const m of text.matchAll(/\/\/\/\s*<reference lib="([^"]+)"\s*\/>/g))
+            await visit(`lib.${m[1].toLowerCase()}.d.ts`);
+    };
+    await visit('lib.es2022.d.ts');
+    await writeFile(`${outdir}/intel/ts-libs.json`, JSON.stringify(libs));
+};
+
+/** Pyright용 typeshed 표준 라이브러리(엔진 버전과 같은 pyright@1.1.299의 typeshed) */
+const buildTypeshed = async () => {
+    const root = 'node_modules/pyright/dist/typeshed-fallback/stdlib';
+    const files: Record<string, string> = {};
+    for (const entry of await readdir(root, { recursive: true, withFileTypes: true })) {
+        if (!entry.isFile()) continue;
+        const path = `${entry.parentPath}/${entry.name}`.replaceAll('\\', '/');
+        if (!path.endsWith('.pyi') && !path.endsWith('/VERSIONS')) continue;
+        files[`/typeshed/stdlib/${path.slice(root.length + 1)}`] = await readFile(path, 'utf8');
+    }
+    await writeFile(`${outdir}/intel/typeshed-stdlib.json`, JSON.stringify(files));
+};
+
+/** Java 자동완성 색인: javac SDK(public/java/compile-classlib.bin)의 클래스 시그니처 */
+const buildJavaIndexFile = async () => {
+    const { readArchive } = await import('./tools/java/classlib-archive.mjs');
+    const { buildJavaIndex } = await import('./src/intel/classfile.ts');
+    const { entries } = readArchive(await readFile('public/java/compile-classlib.bin'));
+    await writeFile(`${outdir}/intel/java-index.json`, JSON.stringify(buildJavaIndex(entries)));
+};
 
 const copyStatic = async () => {
     await mkdir(`${outdir}/wasm`, { recursive: true });
@@ -131,6 +184,16 @@ const copyStatic = async () => {
         if (file.endsWith('.wasm') || file.endsWith('.tar'))
             await cp(`${YOWASP_GEN}/${file}`, `${outdir}/clang/${file}`);
     }
+    await mkdir(`${outdir}/intel`, { recursive: true });
+    await cp(
+        'node_modules/@typefox/pyright-browser/dist/pyright.worker.js',
+        `${outdir}/intel/pyright.worker.js`
+    );
+    await cp(
+        'node_modules/@typefox/pyright-browser/dist/pyright.worker.js.LICENSE.txt',
+        `${outdir}/intel/pyright.worker.js.LICENSE.txt`
+    );
+    await Promise.all([buildTsLibs(), buildTypeshed(), buildJavaIndexFile()]);
     await writeFile(`${outdir}/manifest.json`, JSON.stringify(manifest, null, 2));
 };
 

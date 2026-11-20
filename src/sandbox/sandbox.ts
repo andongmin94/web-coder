@@ -13,6 +13,7 @@ import type {
     SandboxRunResponse,
 } from './protocol.ts';
 import type { CompilerResponse, ProcessOutput } from '../runner/types.ts';
+import type { JavaCheckDiagnostic } from './java-compiler-worker.ts';
 
 const LOAD_TIMEOUT_MS = 30_000;
 const COMPILE_TIMEOUT_MS = 120_000;
@@ -149,6 +150,31 @@ const compileJava = async (req: Extract<SandboxRequest, { type: 'java-compile' }
     }
 };
 
+/** 실시간 진단: javac만 실행 (컴파일 워커를 같이 씀) */
+const checkJava = async (req: Extract<SandboxRequest, { type: 'java-check' }>) => {
+    let worker: Worker;
+    try {
+        worker = getCompiler();
+    } catch {
+        reply({ kind: 'check', id: req.id, diagnostics: [] });
+        return;
+    }
+    const id = nextCompileId++;
+    const res = await new Promise<unknown>((resolve) => {
+        const timer = setTimeout(() => {
+            compiles.delete(id);
+            resolve(null);
+        }, 30_000);
+        compiles.set(id, (r) => {
+            clearTimeout(timer);
+            resolve(r);
+        });
+        worker.postMessage({ type: 'check', id, source: req.source });
+    });
+    const diagnostics = (res as { diagnostics?: JavaCheckDiagnostic[] } | null)?.diagnostics ?? [];
+    reply({ kind: 'check', id: req.id, diagnostics });
+};
+
 // ── 메시지 ──────────────────────────────────────────────────────────
 
 window.addEventListener('message', (event: MessageEvent<SandboxRequest>) => {
@@ -164,6 +190,9 @@ window.addEventListener('message', (event: MessageEvent<SandboxRequest>) => {
             break;
         case 'java-compile':
             void compileJava(req);
+            break;
+        case 'java-check':
+            void checkJava(req);
             break;
         case 'cancel':
             for (const finish of [...running.values()]) finish({ status: 'cancelled' });

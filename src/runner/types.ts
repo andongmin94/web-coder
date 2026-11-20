@@ -34,7 +34,19 @@ export type WorkerResponse = RunResponse | ErrorResponse | StartedResponse;
 export type CompilerRequest =
     | { type: 'warmup' }
     | { type: 'compile'; id: number; source: string; std: string }
-    | { type: 'build-pch'; id: number; std: string };
+    | { type: 'build-pch'; id: number; std: string }
+    /** 인텔리센스: 자동완성/시그니처 (clang -code-completion-at, 줄/열은 1부터, 열은 UTF-8 바이트) */
+    | {
+          type: 'complete';
+          id: number;
+          source: string;
+          std: string;
+          line: number;
+          col: number;
+          memberOnly: boolean;
+      }
+    /** 인텔리센스: 실시간 진단 (clang -fsyntax-only) */
+    | { type: 'diagnose'; id: number; source: string; std: string };
 
 export type CompilerResponse =
     | {
@@ -47,6 +59,8 @@ export type CompilerResponse =
           needsPch?: boolean;
       }
     | { type: 'pch-ready'; id: number; std: string }
+    /** 인텔리센스 결과: clang 출력 원문 (메인 스레드에서 해석) */
+    | { type: 'intel'; id: number; output: string; needsPch: boolean }
     | ErrorResponse;
 
 // ── 공통 결과 ──────────────────────────────────────────────────────

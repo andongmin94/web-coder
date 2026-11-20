@@ -65,7 +65,8 @@ if (cmd === 'info') {
         console.log(existing ? 'replaced' : 'added', entryName, data.length);
     }
     const out = writeArchive(archive);
-    if (readArchive(out).entries.length !== archive.entries.length) throw new Error('roundtrip mismatch');
+    if (readArchive(out).entries.length !== archive.entries.length)
+        throw new Error('roundtrip mismatch');
     writeFileSync(output, out);
     console.log('->', output, out.length, 'bytes');
 } else if (cmd === 'replace') {

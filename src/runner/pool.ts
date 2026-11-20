@@ -5,6 +5,7 @@
 // - JavaScript: sandbox 페이지(eval 허용)의 워커에서 V8로 실행
 import type { ResolvedLanguage } from '../shared/languages.ts';
 import type {
+    SandboxCheckResponse,
     SandboxCompileResponse,
     SandboxRequest,
     SandboxResponse,
@@ -154,7 +155,10 @@ class Sandbox {
     private ready: Promise<boolean>;
     private javaAssetsSent: Promise<void> | null = null;
     private nextId = 1;
-    private pending = new Map<number, (r: SandboxRunResponse | SandboxCompileResponse) => void>();
+    private pending = new Map<
+        number,
+        (r: SandboxRunResponse | SandboxCompileResponse | SandboxCheckResponse) => void
+    >();
 
     constructor() {
         this.frame = document.createElement('iframe');
@@ -203,7 +207,7 @@ class Sandbox {
         return this.javaAssetsSent;
     }
 
-    private request<T extends SandboxRunResponse | SandboxCompileResponse>(
+    private request<T extends SandboxRunResponse | SandboxCompileResponse | SandboxCheckResponse>(
         build: (id: number) => SandboxRequest,
         timeoutMs: number,
         onTimeout: (id: number) => T,
@@ -245,6 +249,21 @@ class Sandbox {
         return res.ok && res.artifact
             ? { ok: true, artifact: res.artifact, diagnostics: res.diagnostics }
             : { ok: false, diagnostics: res.diagnostics };
+    }
+
+    /** Java 실시간 진단 (javac만) */
+    async checkJava(source: string) {
+        try {
+            await this.prepareJava();
+        } catch {
+            return [];
+        }
+        const res = await this.request<SandboxCheckResponse>(
+            (id) => ({ type: 'java-check', id, source }),
+            45_000,
+            (id) => ({ kind: 'check', id, diagnostics: [] })
+        );
+        return res.diagnostics;
     }
 
     async run(
@@ -392,6 +411,31 @@ export class RunnerPool {
 
         this.cacheCompile(key, outcome);
         return outcome;
+    }
+
+    /** C++ 인텔리센스 (자동완성/진단): clang 출력 원문. 실패하면 null */
+    async cppAnalyze(
+        message:
+            | {
+                  type: 'complete';
+                  source: string;
+                  std: string;
+                  line: number;
+                  col: number;
+                  memberOnly: boolean;
+              }
+            | { type: 'diagnose'; source: string; std: string },
+        timeoutMs = 20_000
+    ): Promise<string | null> {
+        const res = await this.getCompiler().request(message, timeoutMs);
+        if (!res || res.type !== 'intel') return null;
+        if (res.needsPch) this.buildPchInBackground(message.std);
+        return res.output;
+    }
+
+    /** Java 실시간 진단 (javac만, WebAssembly 생성 없음) */
+    javaCheck(source: string) {
+        return this.sandbox.checkJava(source);
     }
 
     private cacheCompile(key: string, outcome: Promise<CompileOutcome>) {

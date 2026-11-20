@@ -28,6 +28,12 @@ import {
 import { storage, type CustomTest } from './storage.ts';
 import { setupSplit } from './split.ts';
 import { $, h } from './dom.ts';
+import type { LanguageIntel } from '../intel/types.ts';
+import type { JavaIndex } from '../intel/classfile.ts';
+import { createCppIntel } from '../intel/cpp.ts';
+import { createJavaScriptIntel } from '../intel/javascript.ts';
+import { createPythonIntel } from '../intel/python.ts';
+import { createJavaIntel } from '../intel/java.ts';
 
 // ── 임베드 위치 확인 ─────────────────────────────────────────────
 const parentOrigin = location.ancestorOrigins?.[0];
@@ -355,6 +361,39 @@ const stopTests = () => {
     pool.cancelAll();
 };
 
+// ── 인텔리센스 ───────────────────────────────────────────────────
+// 언어별 엔진은 처음 고를 때 만들고 계속 재사용합니다.
+const intels = new Map<string, LanguageIntel>();
+let javaIndex: Promise<JavaIndex> | null = null;
+const loadJavaIndex = () => {
+    javaIndex ??= fetch('intel/java-index.json').then((r) => r.json() as Promise<JavaIndex>);
+    javaIndex.catch(() => (javaIndex = null));
+    return javaIndex;
+};
+
+const intelFor = (lang: ResolvedLanguage): LanguageIntel => {
+    const key = lang.runtime === 'cpp' ? `cpp:${lang.cppStd}` : lang.runtime;
+    let intel = intels.get(key);
+    if (!intel) {
+        switch (lang.runtime) {
+            case 'cpp':
+                intel = createCppIntel(pool, lang.cppStd ?? 'c++17');
+                break;
+            case 'javascript':
+                intel = createJavaScriptIntel();
+                break;
+            case 'python':
+                intel = createPythonIntel();
+                break;
+            case 'java':
+                intel = createJavaIntel(loadJavaIndex, (code) => pool.javaCheck(code));
+                break;
+        }
+        intels.set(key, intel);
+    }
+    return intel;
+};
+
 // ── 언어 ─────────────────────────────────────────────────────────
 const switchLanguage = async (lang: ResolvedLanguage, initialCode?: string) => {
     if (current) saveCodeNow();
@@ -364,7 +403,7 @@ const switchLanguage = async (lang: ResolvedLanguage, initialCode?: string) => {
 
     const saved = problemId ? await storage.getCode(problemId, lang.id) : undefined;
     const code = initialCode ?? saved ?? RUNTIMES[lang.runtime].template;
-    editor.load(code, RUNTIMES[lang.runtime]);
+    editor.load(code, RUNTIMES[lang.runtime], intelFor(lang));
     pool.warmUp(lang);
 
     compileMessage = null;
@@ -540,7 +579,7 @@ resetButton.addEventListener('click', () => {
     menu.hidden = true;
     if (!current) return;
     if (!confirm('코드를 기본 템플릿으로 되돌릴까요? 지금 코드는 사라집니다.')) return;
-    editor.load(RUNTIMES[current.runtime].template, RUNTIMES[current.runtime]);
+    editor.load(RUNTIMES[current.runtime].template, RUNTIMES[current.runtime], intelFor(current));
     saveCodeNow();
 });
 document.addEventListener('click', (e) => {

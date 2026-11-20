@@ -9,6 +9,17 @@ type Diagnostic = {
     fileName: string | null;
     lineNumber: number;
     message: string;
+    /** javac 진단만: 소스 안의 문자 위치 */
+    startPosition?: number;
+    endPosition?: number;
+    position?: number;
+};
+
+export type JavaCheckDiagnostic = {
+    from: number;
+    to: number;
+    severity: 'error' | 'warning';
+    message: string;
 };
 
 type TeaVMJavac = {
@@ -129,13 +140,57 @@ const compile = async (source: string): Promise<CompilerResponse> => {
     return { type: 'compile', id: 0, ok: true, artifact, diagnostics: javacWarnings };
 };
 
+/** 실시간 진단: javac만 돌려 위치가 있는 진단을 돌려줍니다. (WebAssembly 생성 없음) */
+const check = async (source: string): Promise<JavaCheckDiagnostic[]> => {
+    const compiler = await getCompiler();
+    diagnostics = [];
+    compiler.clearSourceFiles();
+    compiler.clearOutputFiles();
+    compiler.addSourceFile('Main.java', source);
+    compiler.compile();
+    return diagnostics
+        .filter((d) => d.type === 'javac' && d.fileName === 'Main.java' && d.severity !== 'other')
+        .map((d) => {
+            const from = Math.max(0, d.startPosition ?? d.position ?? 0);
+            const to = Math.max(from + 1, d.endPosition ?? from + 1);
+            return {
+                from,
+                to,
+                severity: d.severity === 'warning' ? ('warning' as const) : ('error' as const),
+                message: d.message,
+            };
+        });
+};
+
 self.addEventListener(
     'message',
-    async (event: MessageEvent<CompilerRequest | ({ type: 'assets' } & Assets)>) => {
+    async (
+        event: MessageEvent<
+            | CompilerRequest
+            | ({ type: 'assets' } & Assets)
+            | { type: 'check'; id: number; source: string }
+        >
+    ) => {
         const req = event.data;
         if (req.type === 'assets') {
             provideAssets(req);
             void getCompiler().catch(() => {});
+            return;
+        }
+        if (req.type === 'check') {
+            try {
+                (self as unknown as Worker).postMessage({
+                    type: 'check',
+                    id: req.id,
+                    diagnostics: await check(req.source),
+                });
+            } catch {
+                (self as unknown as Worker).postMessage({
+                    type: 'check',
+                    id: req.id,
+                    diagnostics: [],
+                });
+            }
             return;
         }
         try {

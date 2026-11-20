@@ -1,4 +1,5 @@
 import type { ProcessOutput, RunStatus } from '../runner/types.ts';
+import type { JavaCheckDiagnostic } from './java-compiler-worker.ts';
 
 /**
  * 솔버 → sandbox 페이지.
@@ -24,6 +25,7 @@ export type SandboxRequest =
       }
     | { type: 'java-assets'; wasm: ArrayBuffer; sdk: ArrayBuffer; classlib: ArrayBuffer }
     | { type: 'java-compile'; id: number; source: string }
+    | { type: 'java-check'; id: number; source: string }
     | { type: 'cancel' };
 
 export type SandboxRunResponse = {
@@ -43,4 +45,14 @@ export type SandboxCompileResponse = {
     diagnostics: string;
 };
 
-export type SandboxResponse = { kind: 'ready' } | SandboxRunResponse | SandboxCompileResponse;
+export type SandboxCheckResponse = {
+    kind: 'check';
+    id: number;
+    diagnostics: JavaCheckDiagnostic[];
+};
+
+export type SandboxResponse =
+    | { kind: 'ready' }
+    | SandboxRunResponse
+    | SandboxCompileResponse
+    | SandboxCheckResponse;

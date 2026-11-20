@@ -4,12 +4,12 @@
 OpenJDK의 javac와 [TeaVM](https://teavm.org)(Java 바이트코드 → WebAssembly 컴파일러)을
 하나의 wasm-gc 모듈로 만든 것으로, 브라우저 안에서 `Main.java → .class → .wasm` 컴파일을 합니다.
 
-| 파일 | 내용 |
-| --- | --- |
-| `public/java/compiler.wasm` | javac + TeaVM (wasm-gc) |
+| 파일                               | 내용                                                                              |
+| ---------------------------------- | --------------------------------------------------------------------------------- |
+| `public/java/compiler.wasm`        | javac + TeaVM (wasm-gc)                                                           |
 | `public/java/compile-classlib.bin` | javac가 참조하는 표준 라이브러리 시그니처 (+ `Scanner`, `InputMismatchException`) |
-| `public/java/runtime-classlib.bin` | TeaVM 표준 라이브러리 구현 (+ stdin 패치, `Scanner`) |
-| `vendor/teavm/wasm-runtime.js` | TeaVM wasm-gc JS 런타임 |
+| `public/java/runtime-classlib.bin` | TeaVM 표준 라이브러리 구현 (+ stdin 패치, `Scanner`)                              |
+| `vendor/teavm/wasm-runtime.js`     | TeaVM wasm-gc JS 런타임                                                           |
 
 ## 다시 만들기
 

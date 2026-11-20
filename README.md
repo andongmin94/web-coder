@@ -31,8 +31,26 @@
 - 예제 자동 판정 (BOJ처럼 줄 끝 공백·마지막 빈 줄 무시), 처음 다른 줄 표시, stdout/stderr 분리
 - 시간 초과 시 실행 워커를 강제 종료하므로 무한 루프에도 멈추지 않습니다.
 - 커스텀 테스트, 문제·언어별 코드 자동 저장, 패널 크기 저장, 다크 모드
-- 단축키: `Ctrl+Enter` 실행, `Ctrl+Shift+Enter` 제출
+- 단축키: `Ctrl+Enter` 실행, `Ctrl+Shift+Enter` 제출, `Ctrl+Space` 자동완성
 - 제출은 BOJ 원래 폼에 코드를 채워 원래 제출 버튼으로 보냅니다. (reCAPTCHA 등 BOJ의 제출 절차를 그대로 따름)
+
+## 인텔리센스
+
+자동완성, 함수 시그니처 힌트, 실시간 에러 밑줄을 모든 언어에서 지원합니다. 서버 없이 브라우저 안에서 분석합니다.
+
+| C++ 멤버 자동완성 | Java 시그니처 힌트 | Python 실시간 진단 |
+| --- | --- | --- |
+| ![C++](./docs/screenshots/intel-cpp-complete.png) | ![Java](./docs/screenshots/intel-java-signature.png) | ![Python](./docs/screenshots/intel-python-lint.png) |
+
+| 언어 | 엔진 | 자동완성 | 시그니처 | 실시간 진단 | 호버 |
+| --- | --- | --- | --- | --- | --- |
+| C++ | 실행용 clang 22 그대로 (`-code-completion-at`, `-fsyntax-only`) | ✓ (의미 기반) | ✓ | ✓ | – |
+| node.js | TypeScript 언어 서비스 (JS + Node 타입) | ✓ | ✓ | ✓ | ✓ |
+| Python | Pyright ([@typefox/pyright-browser](https://www.npmjs.com/package/@typefox/pyright-browser)) + typeshed | ✓ | ✓ | ✓ | ✓ |
+| Java | javac(진단) + JDK 시그니처 색인으로 타입 추론 (`sc.`, `list.get(0).`, `System.out.` 등) | ✓ | ✓ | ✓ | ✓ |
+
+- Java는 IntelliJ식 라이브 템플릿을 제공합니다: `sout`, `fori`, `br`, `st`, `pint`, `sb`, `psvm`
+- C++는 `bits/stdc++.h` PCH가 만들어진 뒤로 자동완성 0.1초, 진단 0.2초 안팎으로 응답합니다. (처음 한 번은 PCH를 만드느라 몇 초 걸림)
 
 ## 구조
 
@@ -46,11 +64,12 @@ src/
 ├─ runner/
 │  ├─ pool.ts        # 워커 풀, C++ 컴파일 캐시, 시간 제한
 │  ├─ worker.ts      # 실행 워커 진입점
-│  ├─ compiler-worker.ts # C++ 컴파일 (YoWASP clang, PCH 캐시)
+│  ├─ compiler-worker.ts # C++ 컴파일·인텔리센스 (YoWASP clang, PCH 캐시)
 │  ├─ cpp.ts / python.ts   # 결과물/파이썬 실행 (WASI)
 │  ├─ wasi.ts        # WASI 실행, 기본 파일 시스템 캐시
 │  └─ tar.ts         # tar 파서
 ├─ sandbox/          # node.js 실행용 sandbox 페이지 (eval 허용, extension API 없음)
+├─ intel/            # 인텔리센스 엔진 (C++ clang, TS 서비스, Pyright, Java 색인)
 ├─ judge/            # 출력 비교
 └─ shared/           # 언어 매핑, 메시지 프로토콜
 build.ts             # esbuild 번들 + manifest 생성
