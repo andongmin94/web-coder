@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ko">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>웹 코더</title>
+        <link rel="stylesheet" href="solver.css" />
+    </head>
+    <body>
+        <div id="app">
+            <section id="problem-pane" aria-label="문제">
+                <p class="empty">문제를 불러오는 중…</p>
+            </section>
+            <div
+                id="gutter-col"
+                class="gutter gutter-col"
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="문제 패널 너비 조절"
+                tabindex="0"
+            ></div>
+            <section id="work-pane" aria-label="코드 작성">
+                <div id="toolbar" class="toolbar">
+                    <select id="language" aria-label="언어"></select>
+                    <button id="run" class="button button-primary" type="button" title="Ctrl+Enter">
+                        실행
+                    </button>
+                    <button id="stop" class="button" type="button" hidden>중단</button>
+                    <button
+                        id="submit"
+                        class="button button-accent"
+                        type="button"
+                        title="Ctrl+Shift+Enter"
+                    >
+                        제출
+                    </button>
+                    <select id="code-open" aria-label="소스 코드 공개"></select>
+                    <span class="spacer"></span>
+                    <button id="reset" class="button button-ghost" type="button">템플릿으로</button>
+                    <button id="native" class="button button-ghost" type="button">
+                        기본 제출 폼
+                    </button>
+                </div>
+                <div id="editor"></div>
+                <div
+                    id="gutter-row"
+                    class="gutter gutter-row"
+                    role="separator"
+                    aria-orientation="horizontal"
+                    aria-label="에디터 높이 조절"
+                    tabindex="0"
+                ></div>
+                <div id="tests-pane">
+                    <div class="tests-header">
+                        <strong>테스트</strong>
+                        <span id="test-summary" class="test-summary" aria-live="polite"></span>
+                        <span class="spacer"></span>
+                        <button id="add-test" class="button button-ghost" type="button">
+                            + 테스트 추가
+                        </button>
+                    </div>
+                    <div id="compile-box" class="compile-box" hidden></div>
+                    <div id="test-list"></div>
+                </div>
+            </section>
+        </div>
+        <div id="toast" class="toast" role="status"></div>
+        <script src="solver.js"></script>
+    </body>
+</html>

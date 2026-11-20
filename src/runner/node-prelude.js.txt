@@ -1,0 +1,253 @@
+// QuickJS 안에서 BOJ node.js 환경을 흉내 내는 최소 shim.
+// 호스트가 __stdin(문자열), __write(fd, str)을 넣어 줍니다.
+(function () {
+    'use strict';
+    const g = globalThis;
+    const stdinText = g.__stdin;
+    const write = g.__write;
+    delete g.__stdin;
+    delete g.__write;
+
+    const inspect = (value, depth) => {
+        if (typeof value === 'string') return depth > 0 ? "'" + value + "'" : value;
+        if (typeof value === 'bigint') return value + 'n';
+        if (typeof value === 'function') return '[Function: ' + (value.name || 'anonymous') + ']';
+        if (value === null || typeof value !== 'object') return String(value);
+        if (depth > 2) return Array.isArray(value) ? '[Array]' : '[Object]';
+        if (Array.isArray(value)) {
+            if (value.length === 0) return '[]';
+            return '[ ' + value.map((v) => inspect(v, depth + 1)).join(', ') + ' ]';
+        }
+        if (value instanceof Error) return value.stack ? value.name + ': ' + value.message + '\n' + value.stack : String(value);
+        if (value instanceof Map) {
+            const items = [];
+            value.forEach((v, k) => items.push(inspect(k, depth + 1) + ' => ' + inspect(v, depth + 1)));
+            return 'Map(' + value.size + ') {' + (items.length ? ' ' + items.join(', ') + ' ' : '') + '}';
+        }
+        if (value instanceof Set) {
+            const items = [];
+            value.forEach((v) => items.push(inspect(v, depth + 1)));
+            return 'Set(' + value.size + ') {' + (items.length ? ' ' + items.join(', ') + ' ' : '') + '}';
+        }
+        const keys = Object.keys(value);
+        if (keys.length === 0) return '{}';
+        return '{ ' + keys.map((k) => k + ': ' + inspect(value[k], depth + 1)).join(', ') + ' }';
+    };
+
+    const format = (args) => {
+        if (typeof args[0] === 'string' && /%[sdifoOj%]/.test(args[0])) {
+            let i = 1;
+            const head = args[0].replace(/%([sdifoOj%])/g, (m, c) => {
+                if (c === '%') return '%';
+                if (i >= args.length) return m;
+                const a = args[i++];
+                if (c === 'd' || c === 'i') return String(parseInt(a, 10));
+                if (c === 'f') return String(parseFloat(a));
+                if (c === 's') return typeof a === 'string' ? a : inspect(a, 1);
+                return inspect(a, 1);
+            });
+            return [head].concat(args.slice(i).map((a) => inspect(a, 0))).join(' ');
+        }
+        return args.map((a) => inspect(a, 0)).join(' ');
+    };
+
+    const makeEmitter = () => {
+        const listeners = {};
+        return {
+            on(event, fn) {
+                (listeners[event] = listeners[event] || []).push(fn);
+                return this;
+            },
+            once(event, fn) {
+                const self = this;
+                function wrap() {
+                    self.off(event, wrap);
+                    fn.apply(self, arguments);
+                }
+                return this.on(event, wrap);
+            },
+            off(event, fn) {
+                listeners[event] = (listeners[event] || []).filter((f) => f !== fn);
+                return this;
+            },
+            emit(event) {
+                const args = Array.prototype.slice.call(arguments, 1);
+                (listeners[event] || []).slice().forEach((fn) => fn.apply(this, args));
+                return true;
+            },
+            listenerCount(event) {
+                return (listeners[event] || []).length;
+            },
+        };
+    };
+
+    const stdin = makeEmitter();
+    stdin.fd = 0;
+    stdin.setEncoding = function () {
+        return this;
+    };
+    stdin.resume = function () {
+        return this;
+    };
+
+    class ExitSignal {
+        constructor(code) {
+            this.code = code;
+        }
+    }
+    g.__ExitSignal = ExitSignal;
+
+    const makeStream = (fd) => ({
+        write(chunk) {
+            write(fd, typeof chunk === 'string' ? chunk : String(chunk));
+            return true;
+        },
+        end(chunk) {
+            if (chunk !== undefined) this.write(chunk);
+        },
+    });
+
+    const process = {
+        argv: ['node', '/main.js'],
+        env: {},
+        platform: 'linux',
+        version: 'v22.0.0',
+        versions: { node: '22.0.0' },
+        exitCode: undefined,
+        stdin,
+        stdout: makeStream(1),
+        stderr: makeStream(2),
+        exit(code) {
+            throw new ExitSignal(code === undefined ? process.exitCode || 0 : code);
+        },
+        hrtime: Object.assign(
+            (prev) => {
+                const ms = Date.now();
+                const t = [Math.floor(ms / 1000), (ms % 1000) * 1e6];
+                return prev ? [t[0] - prev[0], t[1] - prev[1]] : t;
+            },
+            { bigint: () => BigInt(Date.now()) * 1000000n }
+        ),
+        memoryUsage: () => ({ rss: 0, heapTotal: 0, heapUsed: 0, external: 0 }),
+        nextTick: (fn, ...args) => Promise.resolve().then(() => fn(...args)),
+        on() {
+            return process;
+        },
+    };
+
+    const STDIN_PATHS = ['/dev/stdin', 0, '0'];
+    const fs = {
+        readFileSync(path, options) {
+            if (STDIN_PATHS.indexOf(path) === -1) {
+                const err = new Error("ENOENT: no such file or directory, open '" + path + "'");
+                err.code = 'ENOENT';
+                throw err;
+            }
+            return stdinText;
+        },
+        writeSync(fd, data) {
+            write(fd, String(data));
+        },
+        writeFileSync(path, data) {
+            if (path === '/dev/stdout' || path === 1) write(1, String(data));
+            else if (path === '/dev/stderr' || path === 2) write(2, String(data));
+        },
+    };
+
+    const interfaces = [];
+    const readline = {
+        createInterface() {
+            const rl = makeEmitter();
+            rl.closed = false;
+            rl.close = function () {
+                if (!this.closed) {
+                    this.closed = true;
+                    this.emit('close');
+                }
+            };
+            rl.question = function (_q, cb) {
+                this.once('line', cb);
+            };
+            rl.setPrompt = rl.prompt = rl.pause = rl.resume = function () {
+                return this;
+            };
+            rl[Symbol.asyncIterator] = function () {
+                const queue = [];
+                let done = false;
+                let waiting = null;
+                rl.on('line', (line) => {
+                    if (waiting) {
+                        const w = waiting;
+                        waiting = null;
+                        w({ value: line, done: false });
+                    } else queue.push(line);
+                });
+                rl.on('close', () => {
+                    done = true;
+                    if (waiting) {
+                        const w = waiting;
+                        waiting = null;
+                        w({ value: undefined, done: true });
+                    }
+                });
+                return {
+                    next() {
+                        if (queue.length) return Promise.resolve({ value: queue.shift(), done: false });
+                        if (done) return Promise.resolve({ value: undefined, done: true });
+                        return new Promise((resolve) => (waiting = resolve));
+                    },
+                    return() {
+                        rl.close();
+                        return Promise.resolve({ value: undefined, done: true });
+                    },
+                };
+            };
+            interfaces.push(rl);
+            return rl;
+        },
+    };
+
+    const util = { inspect: (v) => inspect(v, 0), format: (...a) => format(a) };
+    const modules = { fs, readline, util, process, os: { EOL: '\n' } };
+
+    g.require = (name) => {
+        const key = String(name).replace(/^node:/, '');
+        if (key in modules) return modules[key];
+        throw new Error("Cannot find module '" + name + "'");
+    };
+    g.module = { exports: {} };
+    g.exports = g.module.exports;
+    g.process = process;
+    g.console = {
+        log: (...a) => write(1, format(a) + '\n'),
+        info: (...a) => write(1, format(a) + '\n'),
+        debug: (...a) => write(1, format(a) + '\n'),
+        error: (...a) => write(2, format(a) + '\n'),
+        warn: (...a) => write(2, format(a) + '\n'),
+        trace: (...a) => write(2, format(a) + '\n'),
+        dir: (v) => write(1, inspect(v, 0) + '\n'),
+        table: (v) => write(1, inspect(v, 0) + '\n'),
+        time() {},
+        timeEnd() {},
+        assert(cond, ...a) {
+            if (!cond) write(2, 'Assertion failed' + (a.length ? ': ' + format(a) : '') + '\n');
+        },
+    };
+
+    // 메인 스크립트가 끝난 뒤 호스트가 호출: 입력 이벤트를 흘려보냅니다.
+    g.__drainInput = () => {
+        if (stdin.listenerCount('data') > 0) stdin.emit('data', stdinText);
+        stdin.emit('end');
+        stdin.emit('close');
+        const lines = stdinText.length ? stdinText.replace(/\r/g, '').split('\n') : [];
+        if (lines.length && lines[lines.length - 1] === '') lines.pop();
+        interfaces.forEach((rl) => {
+            for (const line of lines) {
+                if (rl.closed) break;
+                rl.emit('line', line);
+            }
+            rl.close();
+        });
+    };
+    g.__exitCode = () => (typeof process.exitCode === 'number' ? process.exitCode : 0);
+})();

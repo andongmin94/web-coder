@@ -1,0 +1,313 @@
+/*
+ * 웹 코더: TeaVM에 없는 java.util.Scanner 구현 (BOJ 풀이에서 쓰는 범위)
+ * - 구분자는 공백(Character.isWhitespace), 입력 전체를 처음 사용할 때 한 번에 읽습니다.
+ * - next, hasNext, nextLine 계열 의미는 JDK Scanner를 따릅니다. 형식이 틀리면 토큰을 소비하지 않습니다.
+ */
+package __PACKAGE__;
+
+import java.io.Closeable;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.io.StringReader;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
+import java.util.InputMismatchException;
+import java.util.Iterator;
+import java.util.NoSuchElementException;
+
+public final class __SCANNER__ implements Iterator<String>, Closeable {
+    private Reader source;
+    private char[] data;
+    private int len;
+    private int pos;
+    private boolean closed;
+
+    public __SCANNER__(InputStream source) {
+        this(new InputStreamReader(source, StandardCharsets.UTF_8));
+    }
+
+    public __SCANNER__(InputStream source, String charsetName) {
+        this(source);
+    }
+
+    public __SCANNER__(Reader source) {
+        this.source = source;
+    }
+
+    public __SCANNER__(String source) {
+        this(new StringReader(source));
+    }
+
+    private void load() {
+        if (data != null) {
+            return;
+        }
+        char[] buf = new char[1 << 16];
+        int size = 0;
+        try {
+            while (true) {
+                if (size == buf.length) {
+                    char[] bigger = new char[buf.length * 2];
+                    System.arraycopy(buf, 0, bigger, 0, size);
+                    buf = bigger;
+                }
+                int n = source.read(buf, size, buf.length - size);
+                if (n < 0) {
+                    break;
+                }
+                size += n;
+            }
+        } catch (IOException e) {
+            // 읽은 데까지만 사용
+        }
+        data = buf;
+        len = size;
+        source = null;
+    }
+
+    private void ensureOpen() {
+        if (closed) {
+            throw new IllegalStateException("Scanner closed");
+        }
+        load();
+    }
+
+    private int skipWhitespace(int from) {
+        while (from < len && Character.isWhitespace(data[from])) {
+            from++;
+        }
+        return from;
+    }
+
+    private int tokenEnd(int start) {
+        int end = start;
+        while (end < len && !Character.isWhitespace(data[end])) {
+            end++;
+        }
+        return end;
+    }
+
+    /** 다음 토큰을 소비하지 않고 돌려줍니다. 없으면 null. */
+    private String peekToken() {
+        ensureOpen();
+        int start = skipWhitespace(pos);
+        if (start >= len) {
+            return null;
+        }
+        return new String(data, start, tokenEnd(start) - start);
+    }
+
+    private void consumeToken() {
+        int start = skipWhitespace(pos);
+        pos = tokenEnd(start);
+    }
+
+    @Override
+    public boolean hasNext() {
+        return peekToken() != null;
+    }
+
+    @Override
+    public String next() {
+        String token = peekToken();
+        if (token == null) {
+            throw new NoSuchElementException();
+        }
+        consumeToken();
+        return token;
+    }
+
+    private String requireToken() {
+        String token = peekToken();
+        if (token == null) {
+            throw new NoSuchElementException();
+        }
+        return token;
+    }
+
+    private static String stripPlus(String token) {
+        return token.length() > 1 && token.charAt(0) == '+' ? token.substring(1) : token;
+    }
+
+    public int nextInt() {
+        return nextInt(10);
+    }
+
+    public int nextInt(int radix) {
+        String token = requireToken();
+        try {
+            int value = Integer.parseInt(stripPlus(token), radix);
+            consumeToken();
+            return value;
+        } catch (NumberFormatException e) {
+            throw new InputMismatchException("For input string: \"" + token + "\"");
+        }
+    }
+
+    public long nextLong() {
+        return nextLong(10);
+    }
+
+    public long nextLong(int radix) {
+        String token = requireToken();
+        try {
+            long value = Long.parseLong(stripPlus(token), radix);
+            consumeToken();
+            return value;
+        } catch (NumberFormatException e) {
+            throw new InputMismatchException("For input string: \"" + token + "\"");
+        }
+    }
+
+    public short nextShort() {
+        String token = requireToken();
+        try {
+            short value = Short.parseShort(stripPlus(token));
+            consumeToken();
+            return value;
+        } catch (NumberFormatException e) {
+            throw new InputMismatchException("For input string: \"" + token + "\"");
+        }
+    }
+
+    public byte nextByte() {
+        String token = requireToken();
+        try {
+            byte value = Byte.parseByte(stripPlus(token));
+            consumeToken();
+            return value;
+        } catch (NumberFormatException e) {
+            throw new InputMismatchException("For input string: \"" + token + "\"");
+        }
+    }
+
+    public double nextDouble() {
+        String token = requireToken();
+        try {
+            double value = Double.parseDouble(token);
+            consumeToken();
+            return value;
+        } catch (NumberFormatException e) {
+            throw new InputMismatchException("For input string: \"" + token + "\"");
+        }
+    }
+
+    public float nextFloat() {
+        return (float) nextDouble();
+    }
+
+    public boolean nextBoolean() {
+        String token = requireToken();
+        if (token.equalsIgnoreCase("true") || token.equalsIgnoreCase("false")) {
+            consumeToken();
+            return token.equalsIgnoreCase("true");
+        }
+        throw new InputMismatchException("For input string: \"" + token + "\"");
+    }
+
+    public BigInteger nextBigInteger() {
+        String token = requireToken();
+        try {
+            BigInteger value = new BigInteger(stripPlus(token));
+            consumeToken();
+            return value;
+        } catch (NumberFormatException e) {
+            throw new InputMismatchException("For input string: \"" + token + "\"");
+        }
+    }
+
+    public BigDecimal nextBigDecimal() {
+        String token = requireToken();
+        try {
+            BigDecimal value = new BigDecimal(token);
+            consumeToken();
+            return value;
+        } catch (NumberFormatException e) {
+            throw new InputMismatchException("For input string: \"" + token + "\"");
+        }
+    }
+
+    public boolean hasNextInt() {
+        String token = peekToken();
+        if (token == null) {
+            return false;
+        }
+        try {
+            Integer.parseInt(stripPlus(token));
+            return true;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    public boolean hasNextLong() {
+        String token = peekToken();
+        if (token == null) {
+            return false;
+        }
+        try {
+            Long.parseLong(stripPlus(token));
+            return true;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    public boolean hasNextDouble() {
+        String token = peekToken();
+        if (token == null) {
+            return false;
+        }
+        try {
+            Double.parseDouble(token);
+            return true;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    public boolean hasNextBoolean() {
+        String token = peekToken();
+        return token != null && (token.equalsIgnoreCase("true") || token.equalsIgnoreCase("false"));
+    }
+
+    public boolean hasNextLine() {
+        ensureOpen();
+        return pos < len;
+    }
+
+    public String nextLine() {
+        ensureOpen();
+        if (pos >= len) {
+            throw new NoSuchElementException("No line found");
+        }
+        int start = pos;
+        int end = start;
+        while (end < len && data[end] != '\n' && data[end] != '\r') {
+            end++;
+        }
+        String line = new String(data, start, end - start);
+        if (end < len) {
+            if (data[end] == '\r' && end + 1 < len && data[end + 1] == '\n') {
+                end += 2;
+            } else {
+                end += 1;
+            }
+        }
+        pos = end;
+        return line;
+    }
+
+    @Override
+    public void remove() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void close() {
+        closed = true;
+    }
+}

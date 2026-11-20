@@ -1,42 +1,37 @@
 {
   "name": "web-coder",
-  "description": "웹 코더 - BOJ 실행/제출 보조 확장",
-  "main": "index.js",
+  "version": "2.0.0",
+  "private": true,
+  "description": "웹 코더 - BOJ 제출 페이지 로컬 실행/제출 확장",
+  "type": "module",
   "scripts": {
-    "watch": "vite build --watch",
-    "build": "node scripts/bump-extension-version.js && vite build",
+    "build": "node build.ts",
+    "watch": "node build.ts --watch",
+    "test": "node --test \"src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
-    "clean": "rimraf dist",
     "lint": "oxlint . --fix",
     "style": "oxfmt --config .oxfmtrc.json --write ."
   },
   "author": "Andongmin",
   "license": "UNLICENSED",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/andongmin94"
-  },
   "dependencies": {
-    "@obsidize/tar-browserify": "^3.0.0",
-    "@runno/wasi": "^0.10.0",
-    "axios": "^1.6.8",
-    "prism-code-editor": "^3.3.0",
-    "prismjs": "^1.29.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-uuid": "^2.0.0"
+    "@codemirror/lang-cpp": "^6.0.3",
+    "@codemirror/lang-java": "^6.0.2",
+    "@codemirror/lang-javascript": "^6.2.5",
+    "@codemirror/lang-python": "^6.2.1",
+    "@codemirror/theme-one-dark": "^6.1.3",
+    "@runno/wasi": "^0.10.3",
+    "@yowasp/clang": "^22.0.0-git20695-13",
+    "codemirror": "^6.0.2",
+    "dompurify": "^3.4.18",
+    "katex": "^0.19.1"
   },
   "devDependencies": {
-    "@crxjs/vite-plugin": "^2.4.0",
-    "@types/chrome": "0.0.158",
-    "@types/prismjs": "^1.26.3",
-    "@types/react": "^18.0.29",
-    "@types/react-dom": "^18.0.11",
-    "@vitejs/plugin-react": "^6.0.1",
-    "oxfmt": "^0.41.0",
-    "oxlint": "^1.56.0",
-    "rimraf": "^3.0.2 ",
-    "typescript": "^5.9.3",
-    "vite": "^8.0.2"
+    "@types/chrome": "^0.3.7",
+    "@types/node": "^26.6.6",
+    "esbuild": "^0.28.2",
+    "oxfmt": "^0.79.0",
+    "oxlint": "^1.94.0",
+    "typescript": "^7.0.2"
   }
 }
