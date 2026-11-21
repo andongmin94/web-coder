@@ -9,7 +9,12 @@ import {
     type Jspi,
 } from './deep-stack.ts';
 import { createJavaStackDecoder, type JavaFrame } from './java-debug.ts';
-import { OutputCollector, OutputLimitError } from './output.ts';
+import {
+    EAGER_OUTPUT_CHARS,
+    FLUSH_INTERVAL_MS,
+    OutputCollector,
+    OutputLimitError,
+} from './output.ts';
 import type { ProcessOutput } from './types.ts';
 
 const STACK_OVERFLOW_NOTE =
@@ -32,17 +37,17 @@ const charSink = (out: OutputCollector, fd: 1 | 2) => {
         }
     };
     // 줄이 끝날 때도 내보내서, 시간 초과로 강제 종료돼도 그때까지의 출력이 남게 합니다.
-    // 출력이 많을 때 느려지지 않게 처음 몇 줄 뒤로는 시간 간격을 둡니다.
-    let lineFlushes = 0;
+    // 출력이 많을 때 느려지지 않게, 어느 정도 쌓인 뒤로는 시간 간격을 둡니다. (output.ts와 같은 규칙)
+    let total = 0;
     let lastLineFlush = 0;
     const put = (c: number) => {
         buf[n++] = c;
+        total++;
         if (n === buf.length) {
             flush();
         } else if (c === 10) {
             const now = performance.now();
-            if (lineFlushes < 200 || now - lastLineFlush >= 10) {
-                lineFlushes++;
+            if (total <= EAGER_OUTPUT_CHARS || now - lastLineFlush >= FLUSH_INTERVAL_MS) {
                 lastLineFlush = now;
                 flush();
             }

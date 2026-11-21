@@ -20,6 +20,8 @@ const SANDBOX_URL = 'sandbox.html';
 /** 런타임 로딩(수십 MB wasm 컴파일)에 허용하는 시간 */
 const LOAD_TIMEOUT_MS = 90_000;
 const COMPILE_TIMEOUT_MS = 120_000;
+/** 컴파일 전에 PCH 생성을 기다려 주는 최대 시간 (넘으면 PCH 없이 컴파일) */
+const PCH_WAIT_MS = 60_000;
 const SANDBOX_READY_TIMEOUT_MS = 10_000;
 
 const EMPTY_OUTPUT = { stdout: '', stderr: '', exitCode: -1, truncated: false };
@@ -401,7 +403,10 @@ export class RunnerPool {
             const builder = RunnerPool.createCppCompiler();
             build = builder
                 .request({ type: 'build-pch', std, exceptions }, 5 * 60_000)
-                .then(() => {})
+                .then((res) => {
+                    // 실패했거나 응답이 없었으면 다음 컴파일 때 다시 시도합니다.
+                    if (!res || res.type === 'error') this.pchBuilds.delete(key);
+                })
                 .finally(() => builder.terminate());
             this.pchBuilds.set(key, build);
         }
@@ -427,7 +432,12 @@ export class RunnerPool {
         const outcome = (async (): Promise<CompileOutcome> => {
             const compiler = this.getCompiler();
             // PCH 없이 컴파일하면 헤더를 처음부터 읽느라 10초쯤 걸립니다. 만드는 중이면 기다렸다가 씁니다.
-            if (usesBitsStdcxx(source)) await this.buildPch(std, usesExceptions(source));
+            // (PCH 워커가 멈춰도 컴파일까지 붙잡히지 않게 기다리는 시간에 상한을 둡니다)
+            if (usesBitsStdcxx(source))
+                await Promise.race([
+                    this.buildPch(std, usesExceptions(source)),
+                    new Promise((r) => setTimeout(r, PCH_WAIT_MS)),
+                ]);
             const res = await compiler.request(
                 { type: 'compile', source, std },
                 COMPILE_TIMEOUT_MS

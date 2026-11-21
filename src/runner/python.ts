@@ -33,17 +33,33 @@ const loadDeepModule = () => {
     return deepModule;
 };
 
+/** 깊은 재귀 모드가 필요했던 소스. 같은 소스의 다음 테스트는 넘칠 첫 시도를 건너뜁니다. */
+let deepSource: string | null = null;
+
 export const runPython = async (
     source: string,
     stdin: string
 ): Promise<ProcessOutput & { elapsedMs?: number }> => {
     const [module, baseFS] = await warmUpPython();
     const files = () => ({ ...baseFS, [SOURCE]: textFile(SOURCE, source) });
-    const { fs: _fs, stackOverflow, ...output } = await runWasi(module, ARGS, files(), stdin);
-    if (!stackOverflow || !jspi()) return output;
+    let output: ProcessOutput | null = null;
+    if (deepSource !== source || !jspi()) {
+        const { fs: _fs, stackOverflow, ...first } = await runWasi(module, ARGS, files(), stdin);
+        if (!stackOverflow || !jspi()) return first;
+        output = first;
+    }
 
     const deep = await loadDeepModule().catch(() => null);
-    if (!deep) return output;
+    if (!deep) {
+        if (output) return output;
+        const {
+            fs: _fs,
+            stackOverflow: _overflow,
+            ...plain
+        } = await runWasi(module, ARGS, files(), stdin);
+        return plain;
+    }
+    deepSource = source;
     // 실패한 첫 시도와 인터프리터를 고치는 시간은 실행 시간에서 뺍니다.
     const started = performance.now();
     const {

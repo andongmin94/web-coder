@@ -109,6 +109,53 @@ export const createStdinReader = (input: string) => {
 };
 
 /**
+ * poll_oneoff (sleep, select). runno의 구현은 구독 구조체를 잘못된 위치에서 읽어서
+ * time.sleep()이나 std::this_thread::sleep_for()가 끝나지 않으므로 대신 씁니다.
+ * 입출력 구독이 있으면 바로 준비된 것으로 답하고, 시계 구독만 있으면 그때까지 기다립니다.
+ */
+export const pollOneoff = (
+    buffer: ArrayBuffer,
+    subs: number,
+    events: number,
+    count: number,
+    written: number
+): number => {
+    const SUB_SIZE = 48;
+    const EVENT_SIZE = 32;
+    const CLOCK = 0;
+    const ABSTIME = 1;
+    const view = new DataView(buffer);
+    let deadline = Infinity; // ms (Date 기준. runno는 모든 시계를 Date로 답합니다)
+    let hasIo = false;
+    for (let i = 0; i < count; i++) {
+        const sub = subs + i * SUB_SIZE;
+        if (view.getUint8(sub + 8) !== CLOCK) {
+            hasIo = true;
+            continue;
+        }
+        const timeoutMs = Number(view.getBigUint64(sub + 24, true)) / 1e6;
+        const absolute = (view.getUint16(sub + 40, true) & ABSTIME) !== 0;
+        deadline = Math.min(deadline, absolute ? timeoutMs : Date.now() + timeoutMs);
+    }
+    // 실행 워커는 동기로 돌기 때문에 바쁜 대기밖에 할 수 없습니다.
+    if (!hasIo) while (Date.now() < deadline);
+
+    let n = 0;
+    for (let i = 0; i < count; i++) {
+        const sub = subs + i * SUB_SIZE;
+        const type = view.getUint8(sub + 8);
+        if (hasIo && type === CLOCK) continue;
+        const event = events + n++ * EVENT_SIZE;
+        new Uint8Array(buffer, event, EVENT_SIZE).fill(0);
+        view.setBigUint64(event, view.getBigUint64(sub, true), true); // userdata
+        view.setUint8(event + 10, type);
+        if (type !== CLOCK) view.setBigUint64(event + 16, 1024n, true); // 읽고 쓸 수 있는 바이트 수
+    }
+    view.setUint32(written, n, true);
+    return 0;
+};
+
+/**
  * deep을 주면 module은 그 옵션으로 고친 깊은 재귀용 모듈(deep-stack.ts)이어야 하고, JSPI로 실행합니다.
  */
 export const runWasi = async (
@@ -132,13 +179,21 @@ export const runWasi = async (
 
     const api = deep ? jspi() : null;
     const deepRunner = api && deep ? createDeepRunner(api, deep) : null;
+    const wasiImports = wasi.getImportObject() as Record<string, Record<string, unknown>>;
+    let memoryOf: () => ArrayBuffer = () => new ArrayBuffer(0);
     const imports: Record<string, Record<string, unknown>> = {
-        ...wasi.getImportObject(),
+        ...wasiImports,
+        wasi_snapshot_preview1: {
+            ...wasiImports.wasi_snapshot_preview1,
+            poll_oneoff: (subs: number, events: number, count: number, written: number) =>
+                pollOneoff(memoryOf(), subs, events, count, written),
+        },
         // 일반 실행에서는 불리지 않습니다. (cpp-header.ts의 __webcoder_grow)
         webcoder: { grow() {} },
     };
     deepRunner?.install(imports);
     const instance = await WebAssembly.instantiate(module, imports as WebAssembly.Imports);
+    memoryOf = () => (instance.exports.memory as WebAssembly.Memory).buffer;
     let exitCode: number;
     let resultFS: WASIFS = fs;
     let stackOverflow = false;

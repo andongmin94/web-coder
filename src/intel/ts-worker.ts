@@ -249,14 +249,13 @@ const KIND: Record<string, string> = {
     keyword: 'keyword',
 };
 
-const NON_MEMBER_KINDS = new Set<string>([
-    ts.ScriptElementKind.variableElement,
-    ts.ScriptElementKind.constElement,
-    ts.ScriptElementKind.letElement,
-    ts.ScriptElementKind.keyword,
-    ts.ScriptElementKind.classElement,
-    ts.ScriptElementKind.interfaceElement,
-]);
+/**
+ * 멤버 목록에 끼어 오는, 멤버가 아닌 항목인지: 키워드와 전역 `Symbol`(`[Symbol.iterator]` 때문에 나옴).
+ * 종류(const, class 등)만으로 거르면 `path.sep`, `os.EOL` 같은 모듈의 진짜 멤버까지 빠집니다.
+ */
+const isNonMember = (e: ts.CompletionEntry) =>
+    e.kind === ts.ScriptElementKind.keyword ||
+    (e.name === 'Symbol' && e.kind === ts.ScriptElementKind.variableElement);
 
 const flatten = (parts?: ts.SymbolDisplayPart[]) => (parts ?? []).map((p) => p.text).join('');
 
@@ -282,8 +281,7 @@ const handle = (req: Request): unknown => {
                     (e) =>
                         e.kind !== ts.ScriptElementKind.warning &&
                         !e.kindModifiers?.includes('deprecated') &&
-                        // 멤버 목록에 끼어 오는 전역 이름(`[Symbol.iterator]` 때문에 나오는 Symbol)은 뺍니다.
-                        !(result.isMemberCompletion && NON_MEMBER_KINDS.has(e.kind))
+                        !(result.isMemberCompletion && isNonMember(e))
                 )
                 .slice(0, 400)
                 .map((e) => ({

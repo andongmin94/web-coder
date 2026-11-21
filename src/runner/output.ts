@@ -19,9 +19,13 @@ export const setProgressSink = (sink: ProgressSink | null) => {
     progressSink = sink;
 };
 
-/** 처음 몇 번은 쓰는 즉시 보내고, 그 뒤로는 이 간격으로 모아 보냅니다. */
-const EAGER_FLUSHES = 200;
-const FLUSH_INTERVAL_MS = 20;
+/**
+ * 출력이 이만큼 쌓일 때까지는 쓰는 즉시 보내고, 그 뒤로는 간격을 두고 모아 보냅니다.
+ * 모아 둔 출력은 다음 쓰기 때 나가므로, 그 전에 프로그램이 멈추면(무한 루프) 보여 주지 못합니다.
+ * 그래서 디버깅에 흔한 작은 출력은 하나도 빠지지 않게 하고, 큰 출력에서만 속도를 위해 모읍니다.
+ */
+export const EAGER_OUTPUT_CHARS = 64 << 10;
+export const FLUSH_INTERVAL_MS = 2;
 
 export class OutputCollector {
     stdout = '';
@@ -29,7 +33,6 @@ export class OutputCollector {
     truncated = false;
     private sentOut = 0;
     private sentErr = 0;
-    private flushes = 0;
     private lastFlush = 0;
 
     constructor() {
@@ -39,8 +42,11 @@ export class OutputCollector {
     private progress() {
         if (!progressSink) return;
         const now = performance.now();
-        if (this.flushes >= EAGER_FLUSHES && now - this.lastFlush < FLUSH_INTERVAL_MS) return;
-        this.flushes++;
+        if (
+            this.stdout.length + this.stderr.length > EAGER_OUTPUT_CHARS &&
+            now - this.lastFlush < FLUSH_INTERVAL_MS
+        )
+            return;
         this.lastFlush = now;
         progressSink(this.stdout.slice(this.sentOut), this.stderr.slice(this.sentErr), false);
         this.sentOut = this.stdout.length;

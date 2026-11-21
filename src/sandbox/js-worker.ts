@@ -37,12 +37,11 @@ export function jsWorkerMain(prelude: string) {
         // 시간 초과로 강제 종료돼도 그때까지의 출력을 보여 줄 수 있게 실행 중에 흘려보냅니다.
         let sentOut = 0;
         let sentErr = 0;
-        let flushes = 0;
         let lastFlush = 0;
         const progress = () => {
             const t = now();
-            if (flushes >= 200 && t - lastFlush < 20) return;
-            flushes++;
+            // 작은 출력(64KB까지)은 바로바로, 그 뒤로는 모아서 (runner/output.ts와 같은 규칙)
+            if (stdout.length + stderr.length > 64 << 10 && t - lastFlush < 2) return;
             lastFlush = t;
             post({
                 type: 'output',
