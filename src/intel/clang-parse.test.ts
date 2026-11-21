@@ -19,7 +19,7 @@ test('멤버 완성: 오버로드는 하나로 묶고 함수는 스니펫으로'
     const items = parseClangCompletions(out, { member: true });
     const push = items.find((i) => i.label === 'push_back')!;
     assert.equal(push.kind, 'method');
-    assert.equal(push.apply, 'push_back(${const_reference x})');
+    assert.equal(push.apply, 'push_back(${})');
     assert.match(push.detail!, /\+1 오버로드/);
     assert.equal(items.find((i) => i.label === 'size')!.apply, 'size()');
     assert.ok(!items.some((i) => i.label === '__base' || i.label.startsWith('operator')));

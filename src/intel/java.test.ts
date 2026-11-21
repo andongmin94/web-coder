@@ -137,7 +137,7 @@ test('직접 만든 메서드: 전역 목록과 시그니처', () => {
     const items = javaComplete(index, code, pos, false)!.items;
     const solve = items.find((i) => i.label === 'solve')!;
     assert.equal(solve.kind, 'function');
-    assert.equal(solve.apply, 'solve(${int a})');
+    assert.equal(solve.apply, 'solve(${})');
 
     const call = at(USER + 'best(1, |');
     const sigs = javaSignature(index, call.code, call.pos)!;

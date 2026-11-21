@@ -1,6 +1,8 @@
 // LanguageIntel(언어별 엔진) → CodeMirror 확장: 자동완성, 실시간 진단, 호버, 시그니처 힌트
 import {
     autocompletion,
+    insertBracket,
+    pickedCompletion,
     snippetCompletion,
     type Completion,
     type CompletionContext,
@@ -26,6 +28,30 @@ const toCompletion = (item: IntelCompletion): Completion => {
         detail: item.detail,
         boost: item.boost,
     };
+    // 인자가 있는 함수(`이름(${})`): 이름을 넣고 여는 괄호는 "입력한 것처럼" 넣습니다.
+    // 그래야 에디터가 닫는 괄호를 자기가 넣은 것으로 기억해서, 인자를 쓰고 `)`를 쳤을 때
+    // 괄호가 두 개(`f(3))`)가 되지 않고 덮어씁니다.
+    const call = item.apply ? /^([\w$.]+)\(\$\{\}\)$/.exec(item.apply) : null;
+    if (call) {
+        return {
+            ...base,
+            apply: (view, completion, from, to) => {
+                view.dispatch({
+                    changes: { from, to, insert: call[1] },
+                    selection: { anchor: from + call[1].length },
+                    annotations: pickedCompletion.of(completion),
+                    userEvent: 'input.complete',
+                });
+                const bracket = insertBracket(view.state, '(');
+                view.dispatch(
+                    bracket ?? {
+                        ...view.state.replaceSelection('()'),
+                        selection: { anchor: view.state.selection.main.head + 1 },
+                    }
+                );
+            },
+        };
+    }
     if (item.apply && item.apply.includes('${')) return snippetCompletion(item.apply, base);
     return { ...base, apply: item.apply };
 };
@@ -126,10 +152,13 @@ const signaturePlugin = (getIntel: () => LanguageIntel | null) =>
                         (_a, _b, _c, _d, inserted) => (typed += inserted.toString())
                     )
                 );
-                if (!/[(,]$/.test(typed)) return;
                 const view = update.view;
                 const code = view.state.doc.toString();
                 const pos = view.state.selection.main.head;
+                // `(`나 `,`를 입력했을 때, 또는 자동완성으로 `이름()`이 들어가 커서가 괄호 안에 놓였을 때
+                const typedCall = /[(,]\s*$/.test(typed);
+                const completedCall = /\(\)$/.test(typed) && code[pos - 1] === '(';
+                if (!typedCall && !completedCall) return;
                 const open = callOpenParen(code, pos);
                 if (open < 0) return;
                 const seq = ++this.seq;

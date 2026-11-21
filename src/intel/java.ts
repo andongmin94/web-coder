@@ -425,11 +425,6 @@ const typeOf = (ctx: Ctx, expr: string): Resolved => {
 
 const methodLabel = (m: JavaMember) => `${m.n}(${(m.p ?? []).map(shortType).join(', ')})`;
 
-const paramPlaceholder = (type: string) =>
-    shortType(type)
-        .replace(/[^\w<>[\], ]/g, '')
-        .replace(/[{}$]/g, '') || 'arg';
-
 const toItems = (members: Members, wantStatic: boolean): IntelCompletion[] => {
     const items = new Map<string, IntelCompletion & { overloads: number }>();
     for (const f of members.fields) {
@@ -454,9 +449,8 @@ const toItems = (members: Members, wantStatic: boolean): IntelCompletion[] => {
             label: m.n,
             kind: 'method',
             detail: `(${params.map(shortType).join(', ')}) → ${shortType(m.t)}`,
-            apply: params.length
-                ? `${m.n}(${params.map((p) => `\${${paramPlaceholder(p)}}`).join(', ')})`
-                : `${m.n}()`,
+            // 인자가 있으면 괄호 안에 커서를 두고 시그니처 힌트로 안내합니다.
+            apply: params.length ? `${m.n}(\${})` : `${m.n}()`,
             overloads: 1,
             // Object 기본 메서드는 아래로
             boost: m.owner === 'Object' ? -2 : 1,
@@ -495,9 +489,7 @@ export const javaComplete = (index: JavaIndex, code: string, pos: number, explic
             label: m.n,
             kind: 'function',
             detail: `(${params.join(', ')}) → ${m.t}`,
-            apply: params.length
-                ? `${m.n}(${params.map((p) => `\${${paramPlaceholder(p)}}`).join(', ')})`
-                : `${m.n}()`,
+            apply: params.length ? `${m.n}(\${})` : `${m.n}()`,
             boost: 3,
             overloads: 1,
         });

@@ -26,7 +26,9 @@ const snippet = (name: string, pattern: string) => {
     if (!call.startsWith('(')) return undefined;
     const args = [...call.matchAll(/<#([^#]*)#>/g)].map((m) => m[1]);
     if (args.length === 0) return `${name}()`;
-    return `${name}(${args.map((a) => `\${${a.replace(/[{}]/g, '')}}`).join(', ')})`;
+    // 인자가 있으면 괄호 안에 커서를 두고(`${}`) 시그니처 힌트로 인자를 안내합니다.
+    // (인자 자리에 `const_reference x` 같은 글자를 채워 넣으면, 지우지 않고 넘어갔을 때 컴파일 에러가 됩니다)
+    return `${name}(\${})`;
 };
 
 const KEYWORDS = new Set(
