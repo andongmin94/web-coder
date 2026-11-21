@@ -115,12 +115,16 @@ export const renderTest = (
     state: TestState,
     open: boolean,
     specialJudge: boolean,
+    /** 지금 언어에 BOJ가 적용하는 시간 제한 (모르면 null) */
+    judgeLimitMs: number | null,
     callbacks: Callbacks
 ): HTMLElement => {
     let icon: HTMLElement;
     let verdictText: HTMLElement;
     let time: string | null = null;
     let verdict: Verdict | null = null;
+    // 끝까지 돌았지만 BOJ 제한보다 오래 걸린 경우 (로컬은 채점 서버보다 느려서 판정은 바꾸지 않고 알리기만 함)
+    let slow = false;
 
     switch (state.phase) {
         case 'idle':
@@ -148,8 +152,10 @@ export const renderTest = (
                 { class: `test-verdict verdict-${verdict}` },
                 VERDICT[verdict].text
             );
-            if (verdict !== 'timeout' && verdict !== 'cancelled')
+            if (verdict !== 'timeout' && verdict !== 'cancelled') {
                 time = `${Math.round(state.result.timeMs)}ms`;
+                slow = judgeLimitMs !== null && state.result.timeMs > judgeLimitMs;
+            }
             break;
     }
 
@@ -165,7 +171,7 @@ export const renderTest = (
             icon,
             h('span', { class: 'test-name' }, test.label),
             verdictText,
-            h('span', { class: 'test-time' }, time ?? ''),
+            h('span', { class: `test-time ${slow ? 'is-slow' : ''}` }, time ?? ''),
             h('span', { class: 'chevron', 'aria-hidden': 'true' }, '›'),
         ]
     );
@@ -198,7 +204,9 @@ export const renderTest = (
         } else if (verdict !== 'cancelled') {
             if (test.kind === 'sample' && verdict !== 'pass')
                 body.append(plainBlock('기대 출력', test.expected));
-            body.append(plainBlock('실제 출력', stdout));
+            body.append(
+                plainBlock(verdict === 'timeout' ? '실제 출력 (중단 전까지)' : '실제 출력', stdout)
+            );
         }
         if (stderr.trim()) body.append(plainBlock('표준 에러', stderr, 'io-stderr'));
         if (verdict === 'error' && state.result.message)
@@ -212,6 +220,16 @@ export const renderTest = (
                     'p',
                     { class: 'io-note' },
                     `로컬 실행 제한 ${Math.round(state.result.timeMs / 1000)}초를 넘어 중단했습니다.`
+                )
+            );
+        }
+        if (slow && judgeLimitMs !== null) {
+            body.append(
+                h(
+                    'p',
+                    { class: 'io-note io-note-warn' },
+                    `백준의 이 언어 시간 제한(${judgeLimitMs / 1000}초)보다 오래 걸렸습니다. ` +
+                        '로컬 실행은 채점 서버보다 느려서 참고용입니다.'
                 )
             );
         }

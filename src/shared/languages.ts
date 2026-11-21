@@ -101,3 +101,22 @@ export const resolveLanguage = (lang: BojLanguage): ResolvedLanguage | null => {
 
 export const resolveLanguages = (langs: BojLanguage[]): ResolvedLanguage[] =>
     langs.map(resolveLanguage).filter((l): l is ResolvedLanguage => l !== null);
+
+/**
+ * BOJ가 언어별로 늘려 주는 시간 제한 (https://help.acmicpc.net/language/info).
+ * C++는 그대로, Java는 ×2+1초, Python·PyPy·node.js는 ×3+2초.
+ */
+export const judgeTimeLimitMs = (runtime: RuntimeKey, limitSec: number) => {
+    const base = limitSec * 1000;
+    if (runtime === 'java') return base * 2 + 1000;
+    if (runtime === 'python' || runtime === 'javascript') return base * 3 + 2000;
+    return base;
+};
+
+/**
+ * 로컬 실행을 강제로 끊는 시간. 브라우저 실행은 채점 서버보다 느리므로 BOJ 제한보다 넉넉하게 잡습니다.
+ * (C++ wasm은 네이티브의 1.5~2배, CPython wasm은 3~4배쯤 걸림)
+ */
+const LOCAL_SLACK: Record<RuntimeKey, number> = { cpp: 3, java: 2, python: 2.5, javascript: 1.5 };
+export const localTimeoutMs = (runtime: RuntimeKey, limitSec: number) =>
+    Math.min(30_000, Math.max(3_000, judgeTimeLimitMs(runtime, limitSec) * LOCAL_SLACK[runtime]));

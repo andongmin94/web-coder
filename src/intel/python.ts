@@ -140,7 +140,15 @@ export const createPythonIntel = (): LanguageIntel => {
                     },
                 },
                 // 작업 폴더가 처음부터 있어야 "does not exist" 경고가 나지 않습니다.
-                initializationOptions: { files: { ...files, '/workspace/main.py': '' } },
+                initializationOptions: {
+                    files: {
+                        ...files,
+                        '/workspace/main.py': '',
+                        // Pyright는 작업 폴더의 typings/를 스텁 경로로 보는데, 폴더가 없으면
+                        // "stubPath /workspace/typings is not a valid directory" 경고를 냅니다.
+                        '/workspace/typings/.keep': '',
+                    },
+                },
             },
             60_000
         );

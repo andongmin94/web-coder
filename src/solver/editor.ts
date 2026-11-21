@@ -14,12 +14,10 @@ import {
 } from '@codemirror/view';
 import {
     bracketMatching,
-    defaultHighlightStyle,
     foldGutter,
     foldKeymap,
     indentOnInput,
     indentUnit,
-    syntaxHighlighting,
 } from '@codemirror/language';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete';
@@ -29,10 +27,10 @@ import { cpp } from '@codemirror/lang-cpp';
 import { python } from '@codemirror/lang-python';
 import { javascript } from '@codemirror/lang-javascript';
 import { java } from '@codemirror/lang-java';
-import { oneDark } from '@codemirror/theme-one-dark';
 import type { RuntimeInfo } from '../shared/languages.ts';
 import type { LanguageIntel } from '../intel/types.ts';
 import { intelExtensions } from './intel-ext.ts';
+import { AUTO_THEME, editorThemeExtension } from './themes.ts';
 
 const languageExtension = (editor: RuntimeInfo['editor']): Extension => {
     switch (editor) {
@@ -57,6 +55,9 @@ export class CodeEditor {
     private readonly view: EditorView;
     private readonly languageSlot = new Compartment();
     private readonly themeSlot = new Compartment();
+    private readonly wrapSlot = new Compartment();
+    private theme = AUTO_THEME;
+    private wrap = false;
     private readonly darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
     private languageExt: Extension = [];
     private readonly handlers: EditorHandlers;
@@ -71,9 +72,28 @@ export class CodeEditor {
     }
 
     private themeExt(): Extension {
-        return this.darkQuery.matches
-            ? oneDark
-            : syntaxHighlighting(defaultHighlightStyle, { fallback: true });
+        return editorThemeExtension(this.theme, this.darkQuery.matches);
+    }
+
+    private wrapExt(): Extension {
+        return this.wrap ? EditorView.lineWrapping : [];
+    }
+
+    /** 에디터 테마 (themes.ts의 id, 또는 시스템 설정을 따르는 AUTO_THEME) */
+    setTheme(id: string) {
+        this.theme = id;
+        this.view.dispatch({ effects: this.themeSlot.reconfigure(this.themeExt()) });
+    }
+
+    /** 긴 줄을 화면 너비에 맞춰 접을지 */
+    setWrap(wrap: boolean) {
+        this.wrap = wrap;
+        this.view.dispatch({ effects: this.wrapSlot.reconfigure(this.wrapExt()) });
+    }
+
+    /** 글자 크기 같은 스타일이 바뀐 뒤 줄 높이를 다시 재게 합니다. */
+    refresh() {
+        this.view.requestMeasure();
     }
 
     private createState(doc: string) {
@@ -117,6 +137,7 @@ export class CodeEditor {
                 intelExtensions(() => this.intel),
                 this.languageSlot.of(this.languageExt),
                 this.themeSlot.of(this.themeExt()),
+                this.wrapSlot.of(this.wrapExt()),
                 EditorView.updateListener.of((update) => {
                     if (update.docChanged) onChange(update.state.doc.toString());
                 }),

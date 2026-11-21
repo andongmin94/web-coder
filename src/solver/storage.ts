@@ -6,6 +6,12 @@ export type Prefs = {
     problemRatio?: number;
     /** 결과 패널 너비 비율 (0~1) */
     resultsRatio?: number;
+    /** 에디터 테마 (themes.ts의 id, 없으면 시스템 설정을 따름) */
+    editorTheme?: string;
+    /** 에디터 글자 크기 (px) */
+    editorFontSize?: number;
+    /** 긴 줄 자동 줄바꿈 */
+    editorWrap?: boolean;
 };
 
 export type CustomTest = { id: string; input: string; expected: string };

@@ -40,7 +40,7 @@ type TeaVMJavac = {
 
 /**
  * BOJ처럼 Main.main을 실행하되, 잡히지 않은 예외는 JVM과 같은 형식으로 출력하고 종료 코드 1로 끝냅니다.
- * (TeaVM의 printStackTrace는 난독화된 프레임만 보여 줘서 예외와 원인만 출력합니다.)
+ * (스택 트레이스의 클래스·메서드·줄 번호는 실행 쪽 src/runner/java.ts가 디버그 정보로 채웁니다.)
  */
 const LAUNCHER = `public class WebcoderLauncher {
     public static void main(String[] args) {
@@ -48,10 +48,8 @@ const LAUNCHER = `public class WebcoderLauncher {
             Main.main(args);
         } catch (Throwable t) {
             System.out.flush();
-            System.err.println("Exception in thread \\"main\\" " + t);
-            for (Throwable c = t.getCause(); c != null && c != c.getCause(); c = c.getCause()) {
-                System.err.println("Caused by: " + c);
-            }
+            System.err.print("Exception in thread \\"main\\" ");
+            t.printStackTrace();
             System.exit(1);
         }
         System.out.flush();
@@ -87,14 +85,36 @@ const getCompiler = () => {
     return compilerPromise;
 };
 
-const formatDiagnostics = (list: Diagnostic[]) =>
+/**
+ * javac처럼 에러가 난 소스 줄과 위치(^)를 덧붙입니다.
+ *   Main.java:3: error: incompatible types: String cannot be converted to int
+ *           int x = "s";
+ *                   ^
+ * 메시지가 여러 줄이면(symbol:, location: 등) javac처럼 첫 줄 바로 뒤에 넣습니다.
+ */
+const sourceSnippet = (source: string, d: Diagnostic) => {
+    if (d.type !== 'javac' || d.fileName !== 'Main.java' || d.lineNumber <= 0) return '';
+    const text = source.split('\n')[d.lineNumber - 1]?.replace(/\r$/, '');
+    if (text === undefined || !text.trim()) return '';
+    const position = d.position ?? d.startPosition;
+    if (position === undefined || position < 0) return `\n${text}`;
+    // 줄 시작 위치를 찾아 열을 구합니다. 탭은 그대로 두어야 ^가 같은 자리에 옵니다.
+    const lineStart = source.lastIndexOf('\n', position - 1) + 1;
+    const column = Math.min(Math.max(0, position - lineStart), text.length);
+    const padding = text.slice(0, column).replace(/[^\t]/g, ' ');
+    return `\n${text}\n${padding}^`;
+};
+
+const formatDiagnostics = (list: Diagnostic[], source = '') =>
     list
         .filter((d) => d.fileName !== 'WebcoderLauncher.java')
         .map((d) => {
             const where = d.fileName
                 ? `${d.fileName}${d.lineNumber > 0 ? `:${d.lineNumber}` : ''}: `
                 : '';
-            return `${where}${d.severity}: ${d.message}`;
+            const [head, ...details] = d.message.split('\n');
+            const rest = details.length ? `\n${details.join('\n')}` : '';
+            return `${where}${d.severity}: ${head}${sourceSnippet(source, d)}${rest}`;
         })
         .join('\n');
 
@@ -118,11 +138,11 @@ const compile = async (source: string): Promise<CompilerResponse> => {
         type: 'compile',
         id: 0,
         ok: false,
-        diagnostics: formatDiagnostics(diagnostics) || fallback,
+        diagnostics: formatDiagnostics(diagnostics, source) || fallback,
     });
 
     if (!compiler.compile()) return fail('컴파일에 실패했습니다.');
-    const javacWarnings = formatDiagnostics(diagnostics);
+    const javacWarnings = formatDiagnostics(diagnostics, source);
     diagnostics = [];
     if (
         !(await compiler.generateWebAssembly({

@@ -10,12 +10,15 @@ import {
 } from '../shared/protocol.ts';
 import {
     RUNTIMES,
+    judgeTimeLimitMs,
+    localTimeoutMs,
     resolveLanguages,
     type ResolvedLanguage,
     type RuntimeKey,
 } from '../shared/languages.ts';
 import { RunnerPool } from '../runner/pool.ts';
 import { CodeEditor } from './editor.ts';
+import { AUTO_THEME, EDITOR_THEMES, themeScheme } from './themes.ts';
 import { limitChips, renderProblem, renderProblemMissing } from './problem-view.ts';
 import {
     isBadVerdict,
@@ -171,6 +174,7 @@ const renderCard = (t: TestCase) =>
         testStates.get(t.id) ?? { phase: 'idle' },
         openTests.has(t.id),
         specialJudge(),
+        judgeLimitMs(),
         callbacks
     );
 
@@ -254,11 +258,14 @@ const renderStatus = () => {
 };
 
 // ── 실행 ─────────────────────────────────────────────────────────
-const localTimeoutMs = () => {
-    // 브라우저 WASM은 네이티브보다 느리므로 BOJ 제한보다 넉넉하게 잡습니다.
-    const limit = (problem?.timeLimitSec ?? 2) * 1000;
-    return Math.min(20_000, Math.max(3_000, limit * 4));
-};
+/** 문제에 시간 제한 정보가 없을 때 쓰는 값 (초) */
+const DEFAULT_TIME_LIMIT_SEC = 2;
+
+/** 지금 언어에 BOJ가 적용하는 시간 제한. 문제 정보가 없으면 null (경고를 띄우지 않음) */
+const judgeLimitMs = () =>
+    current && problem?.timeLimitSec
+        ? judgeTimeLimitMs(current.runtime, problem.timeLimitSec)
+        : null;
 
 const setStage = (next: Stage | null) => {
     stage = next;
@@ -324,7 +331,10 @@ const runTests = async () => {
             done,
             total: tests.length,
         });
-        const timeout = localTimeoutMs();
+        const timeout = localTimeoutMs(
+            lang.runtime,
+            problem?.timeLimitSec ?? DEFAULT_TIME_LIMIT_SEC
+        );
         await Promise.all(
             tests.map(async (test) => {
                 testStates.set(test.id, { phase: 'running' });
@@ -631,3 +641,68 @@ window.addEventListener('message', (event: MessageEvent) => {
 });
 
 send({ type: 'ready' });
+
+// ── 에디터 설정 (테마, 글자 크기, 줄바꿈) ───────────────────────
+const themeSelect = $<HTMLSelectElement>('#editor-theme');
+const fontSizeSelect = $<HTMLSelectElement>('#editor-font-size');
+const wrapCheckbox = $<HTMLInputElement>('#editor-wrap');
+const FONT_SIZES = [12, 13, 14, 14.5, 15, 16, 18, 20];
+const DEFAULT_FONT_SIZE = 14.5;
+
+// 출처별로 묶고, 그 안에서 밝은 테마를 먼저 보여 줍니다.
+const themeGroups = [...new Set(EDITOR_THEMES.map((theme) => theme.group))].map((group) =>
+    h(
+        'optgroup',
+        { label: group },
+        EDITOR_THEMES.filter((theme) => theme.group === group)
+            .sort((x, y) => Number(x.dark) - Number(y.dark))
+            .map((theme) =>
+                h('option', { value: theme.id }, `${theme.name}${theme.dark ? ' ●' : ' ○'}`)
+            )
+    )
+);
+themeSelect.replaceChildren(h('option', { value: AUTO_THEME }, '시스템 설정 따름'), ...themeGroups);
+fontSizeSelect.replaceChildren(
+    ...FONT_SIZES.map((size) => h('option', { value: String(size) }, `${size}px`))
+);
+
+/** 테마를 에디터에 적용하고, 작업 공간 전체의 밝기도 그 테마에 맞춥니다. */
+const applyTheme = (id: string) => {
+    editor.setTheme(id);
+    const scheme = themeScheme(id);
+    if (scheme) document.documentElement.dataset.scheme = scheme;
+    else delete document.documentElement.dataset.scheme;
+};
+const applyFontSize = (size: number) => {
+    document.documentElement.style.setProperty('--editor-font-size', `${size}px`);
+    editor.refresh();
+};
+
+void storage.getPrefs().then((prefs) => {
+    const theme = EDITOR_THEMES.some((t) => t.id === prefs.editorTheme)
+        ? prefs.editorTheme!
+        : AUTO_THEME;
+    const size = FONT_SIZES.includes(prefs.editorFontSize ?? NaN)
+        ? prefs.editorFontSize!
+        : DEFAULT_FONT_SIZE;
+    themeSelect.value = theme;
+    fontSizeSelect.value = String(size);
+    wrapCheckbox.checked = prefs.editorWrap === true;
+    applyTheme(theme);
+    applyFontSize(size);
+    editor.setWrap(wrapCheckbox.checked);
+});
+
+themeSelect.addEventListener('change', () => {
+    applyTheme(themeSelect.value);
+    void storage.updatePrefs({ editorTheme: themeSelect.value });
+});
+fontSizeSelect.addEventListener('change', () => {
+    const size = Number(fontSizeSelect.value);
+    applyFontSize(size);
+    void storage.updatePrefs({ editorFontSize: size });
+});
+wrapCheckbox.addEventListener('change', () => {
+    editor.setWrap(wrapCheckbox.checked);
+    void storage.updatePrefs({ editorWrap: wrapCheckbox.checked });
+});

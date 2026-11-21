@@ -8,6 +8,7 @@
 # 2) 웹 코더 패치 적용
 #    - System.in: TeaVM 원본은 항상 EOF → webcoderStdin import로 입력을 읽도록 교체
 #    - java.util.Scanner / InputMismatchException 추가 (TeaVM에 없음)
+#    - Thread(ThreadGroup, Runnable, String, long) 생성자 추가 (patch-thread.mjs)
 # 3) public/java/에 복사
 set -euo pipefail
 
@@ -76,6 +77,9 @@ node "$HERE/classlib-archive.mjs" put "$DIST/runtime-classlib-teavm.bin" "$ROOT/
 node "$HERE/classlib-archive.mjs" put "$DIST/compile-classlib-teavm.bin" "$ROOT/public/java/compile-classlib.bin" \
     "java/util/Scanner.class=$OUT/sdk/java/util/Scanner.class" \
     "java/util/InputMismatchException.class=$OUT/sdk/java/util/InputMismatchException.class"
+
+# ThreadGroup을 받는 Thread 생성자 추가 (클래스 파일을 직접 고침)
+node "$HERE/patch-thread.mjs"
 
 cp "$DIST/compiler.wasm" "$ROOT/public/java/compiler.wasm"
 cp "$DIST/compiler.wasm-runtime.js" "$ROOT/vendor/teavm/wasm-runtime.js"

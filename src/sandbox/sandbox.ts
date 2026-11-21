@@ -41,6 +41,9 @@ const run = (req: Extract<SandboxRequest, { type: 'run' }>) => {
         LOAD_TIMEOUT_MS
     );
     let done = false;
+    // 실행 중 받은 출력. 시간 초과·중단으로 워커를 종료해도 여기까지는 보여 줍니다.
+    const partial = { stdout: '', stderr: '' };
+    const partialOutput = (): ProcessOutput => ({ ...partial, exitCode: -1, truncated: false });
 
     const finish: Finish = (result) => {
         if (done) return;
@@ -54,14 +57,21 @@ const run = (req: Extract<SandboxRequest, { type: 'run' }>) => {
     worker.onmessage = (event) => {
         const data = event.data as
             | { type: 'started' }
+            | { type: 'output'; stdout: string; stderr: string; reset: boolean }
             | { type: 'error'; message: string }
             | ({ type: 'done'; timeMs: number } & ProcessOutput);
         if (data.type === 'started') {
             clearTimeout(timer);
             timer = window.setTimeout(
-                () => finish({ status: 'timeout', timeMs: req.timeoutMs }),
+                () => finish({ status: 'timeout', timeMs: req.timeoutMs, output: partialOutput() }),
                 req.timeoutMs + 100
             );
+            return;
+        }
+        if (data.type === 'output') {
+            if (data.reset) partial.stdout = partial.stderr = '';
+            partial.stdout += data.stdout;
+            partial.stderr += data.stderr;
             return;
         }
         if (data.type === 'error') {

@@ -27,12 +27,21 @@ JAVA_HOME=/path/to/jdk-25 tools/java/build.sh
 - `patch/templates/Scanner.java.tmpl`, `InputMismatchException.java.tmpl`
   TeaVM에 없는 `java.util.Scanner`를 BOJ 풀이에서 쓰는 범위로 구현합니다.
   같은 소스로 TeaVM 런타임용(`TScanner`)과 javac SDK용(`java.util.Scanner`)을 만듭니다.
+- `patch-thread.mjs`
+  TeaVM의 `Thread`에 없는 `Thread(ThreadGroup, Runnable, String, long)` 계열 생성자와 `ThreadGroup`을 추가합니다.
+  (`new Thread(null, r, "", 1 << 26).start()` 관용구용. 스레드 그룹과 스택 크기는 무시)
+  JDK 없이 `public/java/`의 클래스 파일을 직접 고치며, `build.sh`가 마지막에 실행합니다.
 - `classlib-archive.mjs`: TeaVM 클래스 라이브러리 아카이브(gzip + 길이 접두 항목) 읽기/쓰기
 
 ## 알려진 한계
 
-- 브라우저 Worker의 스택 크기 때문에 재귀 깊이가 약 4천~9천을 넘으면 `StackOverflowError`가 납니다.
+- 브라우저의 호출 스택 한계는 깊은 재귀 모드(`src/runner/deep-stack.ts`)로 넘깁니다. JSPI가 없는 브라우저(Chrome 136 이하)에서는 재귀 깊이가 약 4천~9천을 넘으면 `StackOverflowError`가 납니다.
+- 스레드는 TeaVM이 타이머로 이어 붙여 실행합니다. (한 번에 하나씩 실행되고, 스택 크기 지정은 의미가 없음)
 - TeaVM이 지원하지 않는 API(리플렉션 일부 등)는 컴파일되지 않을 수 있습니다.
+- 런타임이 직접 만드는 예외(`ArrayIndexOutOfBoundsException`, `NullPointerException`, `ArithmeticException`)와
+  클래스 라이브러리 일부(`ArrayList.get` 등)는 메시지가 없어서 `getMessage()`가 `null`입니다.
+  (JVM은 `Index 5 out of bounds for length 3`, `/ by zero` 등을 줌) 어디서 났는지는 스택 트레이스의 줄 번호로 알 수 있습니다.
+- 스택 트레이스의 클래스 라이브러리 프레임은 TeaVM 소스 기준이라 파일 이름이 `TArrayList.java`처럼 나옵니다.
 
 ## 라이선스
 

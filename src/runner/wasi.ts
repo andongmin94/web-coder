@@ -1,6 +1,7 @@
 // WASI 바이너리 실행 공통 로직 (clang, wasm-ld, python, 사용자 프로그램).
 import { WASI, type WASIFS } from '@runno/wasi';
 import { parseTar } from './tar.ts';
+import { createDeepRunner, isStackOverflow, jspi, type DeepStackOptions } from './deep-stack.ts';
 import { OutputCollector, OutputLimitError } from './output.ts';
 import type { ProcessOutput } from './types.ts';
 
@@ -77,7 +78,11 @@ export const binaryFile = (path: string, content: Uint8Array): WASIFS[string] =>
     };
 };
 
-export type WasiRun = ProcessOutput & { fs: WASIFS };
+export type WasiRun = ProcessOutput & {
+    fs: WASIFS;
+    /** 브라우저의 호출 스택 한계(재귀 깊이)로 죽었는지 */
+    stackOverflow: boolean;
+};
 
 const utf8Length = (text: string) => new TextEncoder().encode(text).length;
 
@@ -103,11 +108,15 @@ export const createStdinReader = (input: string) => {
     };
 };
 
+/**
+ * deep을 주면 module은 그 옵션으로 고친 깊은 재귀용 모듈(deep-stack.ts)이어야 하고, JSPI로 실행합니다.
+ */
 export const runWasi = async (
     module: WebAssembly.Module,
     args: string[],
     fs: WASIFS,
-    stdin: string
+    stdin: string,
+    deep: DeepStackOptions | null = null
 ): Promise<WasiRun> => {
     const out = new OutputCollector();
     const readStdin = createStdinReader(stdin);
@@ -121,24 +130,59 @@ export const runWasi = async (
         stderr: (chunk) => out.write(2, chunk),
     });
 
-    const instance = await WebAssembly.instantiate(module, wasi.getImportObject());
+    const api = deep ? jspi() : null;
+    const deepRunner = api && deep ? createDeepRunner(api, deep) : null;
+    const imports: Record<string, Record<string, unknown>> = {
+        ...wasi.getImportObject(),
+        // 일반 실행에서는 불리지 않습니다. (cpp-header.ts의 __webcoder_grow)
+        webcoder: { grow() {} },
+    };
+    deepRunner?.install(imports);
+    const instance = await WebAssembly.instantiate(module, imports as WebAssembly.Imports);
     let exitCode: number;
     let resultFS: WASIFS = fs;
+    let stackOverflow = false;
     try {
-        const result = wasi.start({ module, instance });
-        exitCode = result.exitCode;
-        resultFS = result.fs;
-        if (exitCode === 134) {
-            // runno는 WebAssembly.RuntimeError를 134로 바꿔 돌려줍니다.
-            out.stderr +=
-                '\n[런타임 에러] 비정상 종료 (잘못된 메모리 접근, abort, 0으로 나누기 등)';
+        if (deepRunner) {
+            // wasi.start()는 _start를 동기로 부르므로, 같은 준비만 하고 직접 실행합니다.
+            Object.assign(wasi, {
+                instance,
+                module,
+                memory: instance.exports.memory,
+                hasBeenInitialized: true,
+            });
+            try {
+                await deepRunner.start(instance);
+                exitCode = 0;
+            } catch (error) {
+                // proc_exit: runno가 종료 코드를 담은 예외를 던집니다.
+                const code = (error as { code?: unknown }).code;
+                if (typeof code !== 'number' || error instanceof WebAssembly.RuntimeError)
+                    throw error;
+                exitCode = code;
+            }
+        } else {
+            const result = wasi.start({ module, instance });
+            exitCode = result.exitCode;
+            resultFS = result.fs;
+            if (exitCode === 134) {
+                // runno는 WebAssembly.RuntimeError를 134로 바꿔 돌려줍니다.
+                out.stderr +=
+                    '\n[런타임 에러] 비정상 종료 (잘못된 메모리 접근, abort, 0으로 나누기 등)';
+            }
         }
     } catch (error) {
         if (error instanceof OutputLimitError) {
             exitCode = 0;
         } else {
             // wasm trap (스택 오버플로, 잘못된 메모리 접근, abort 등)
-            const message = error instanceof Error ? error.message : String(error);
+            stackOverflow = isStackOverflow(error);
+            const message =
+                error instanceof WebAssembly.Exception
+                    ? '잡히지 않은 C++ 예외로 종료했습니다.'
+                    : error instanceof Error
+                      ? error.message
+                      : String(error);
             out.stderr += `\n[런타임 에러] ${message}`;
             exitCode = 134;
         }
@@ -150,5 +194,6 @@ export const runWasi = async (
         exitCode,
         truncated: out.truncated,
         fs: resultFS,
+        stackOverflow,
     };
 };

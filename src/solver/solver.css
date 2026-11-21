@@ -30,8 +30,35 @@
     color-scheme: light;
 }
 
+/* 에디터 테마를 고르면 data-scheme이 붙고, 시스템 설정 대신 그 테마의 밝기를 따릅니다. */
+:root[data-scheme='dark'] {
+    --bg: #1b1e23;
+    --bg-soft: #20242a;
+    --bg-sunken: #16191d;
+    --bg-hover: #2a2f37;
+    --fg: #e6e8eb;
+    --fg-muted: #a3abb5;
+    --fg-faint: #7d858f;
+    --border: #2f343c;
+    --border-strong: #3c424c;
+    --primary: #3d8bfd;
+    --primary-hover: #5a9bfd;
+    --primary-fg: #0b1220;
+    --submit: #2ea043;
+    --submit-hover: #3fb950;
+    --pass: #3fb950;
+    --pass-bg: #18301f;
+    --fail: #ff6b6b;
+    --fail-bg: #3a1d1f;
+    --warn: #e3b341;
+    --warn-bg: #352b12;
+    --info-bg: #182a44;
+    --shadow: 0 8px 28px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.35);
+    color-scheme: dark;
+}
+
 @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-scheme='light']) {
         --bg: #1b1e23;
         --bg-soft: #20242a;
         --bg-sunken: #16191d;
@@ -477,7 +504,7 @@ body.dragging .gutter {
 }
 
 #editor .cm-editor {
-    font-size: 14.5px;
+    font-size: var(--editor-font-size, 14.5px);
 }
 
 #editor .cm-scroller {
@@ -683,6 +710,11 @@ body.dragging .gutter {
     font: 12px var(--mono);
 }
 
+.test-time.is-slow {
+    color: var(--warn);
+    font-weight: 600;
+}
+
 .chevron {
     color: var(--fg-faint);
     transition: transform 0.15s;
@@ -755,6 +787,10 @@ body.dragging .gutter {
     margin: 0;
     color: var(--fail);
     font-size: 12.5px;
+}
+
+.io-note-warn {
+    color: var(--warn);
 }
 
 .test-remove {
@@ -907,4 +943,27 @@ li[aria-selected] .cm-completionDetail {
     text-decoration: underline wavy var(--warn);
     text-underline-offset: 3px;
     text-decoration-skip-ink: none;
+}
+
+/* ── ⋯ 메뉴의 에디터 설정 ─────────────────────────────── */
+.menu {
+    min-width: 290px;
+}
+
+.menu-row input[type='checkbox'] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--primary);
+    cursor: pointer;
+}
+
+.menu-divider {
+    height: 1px;
+    margin: 6px 4px;
+    background: var(--border);
+}
+
+.menu-row > span {
+    white-space: nowrap;
 }

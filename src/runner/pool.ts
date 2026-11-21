@@ -11,6 +11,7 @@ import type {
     SandboxResponse,
     SandboxRunResponse,
 } from '../sandbox/protocol.ts';
+import { usesBitsStdcxx, usesExceptions } from './cpp-header.ts';
 import type { CompilerRequest, CompilerResponse, RunResult, WorkerResponse } from './types.ts';
 
 const RUNNER_URL = 'runner-worker.js';
@@ -23,7 +24,17 @@ const SANDBOX_READY_TIMEOUT_MS = 10_000;
 
 const EMPTY_OUTPUT = { stdout: '', stderr: '', exitCode: -1, truncated: false };
 
-type Final<T> = Exclude<T, { type: 'started' }>;
+type Final<T> = Exclude<T, { type: 'started' } | { type: 'output' }>;
+/** 실행 중 받은 출력 (시간 초과 시 보여 줄 부분 출력) */
+type Partial = { stdout: string; stderr: string };
+type TimedOut = { type: 'timeout'; partial: Partial };
+
+const partialOutput = (partial: Partial) => ({
+    stdout: partial.stdout,
+    stderr: partial.stderr,
+    exitCode: -1,
+    truncated: false,
+});
 type WithoutId<T> = T extends unknown ? Omit<T, 'id'> : never;
 
 // ── 실행 워커 ────────────────────────────────────────────────────────
@@ -34,7 +45,11 @@ class RunnerWorker {
     private nextId = 1;
     private pending = new Map<
         number,
-        { resolve: (r: Final<WorkerResponse> | null) => void; onStarted: () => void }
+        {
+            resolve: (r: Final<WorkerResponse> | null) => void;
+            onStarted: () => void;
+            partial: Partial;
+        }
     >();
 
     constructor() {
@@ -43,6 +58,12 @@ class RunnerWorker {
             if (!p) return;
             if (e.data.type === 'started') {
                 p.onStarted();
+                return;
+            }
+            if (e.data.type === 'output') {
+                if (e.data.reset) p.partial.stdout = p.partial.stderr = '';
+                p.partial.stdout += e.data.stdout;
+                p.partial.stderr += e.data.stderr;
                 return;
             }
             this.pending.delete(e.data.id);
@@ -62,14 +83,15 @@ class RunnerWorker {
 
     /**
      * 처음엔 loadTimeoutMs, 워커가 'started'를 알리면 그때부터 runTimeoutMs로 다시 잽니다.
-     * 시간이 넘으면 null.
+     * 시간이 넘으면 그때까지 받은 출력과 함께 'timeout', 워커가 종료되면 null.
      */
     request(message: Record<string, unknown>, loadTimeoutMs: number, runTimeoutMs: number) {
         const id = this.nextId++;
-        return new Promise<Final<WorkerResponse> | null>((resolve) => {
+        return new Promise<Final<WorkerResponse> | TimedOut | null>((resolve) => {
+            const partial: Partial = { stdout: '', stderr: '' };
             const expire = () => {
                 this.pending.delete(id);
-                resolve(null);
+                resolve({ type: 'timeout', partial });
             };
             let timer = setTimeout(expire, loadTimeoutMs);
             this.pending.set(id, {
@@ -81,6 +103,7 @@ class RunnerWorker {
                     clearTimeout(timer);
                     timer = setTimeout(expire, runTimeoutMs);
                 },
+                partial,
             });
             this.worker.postMessage({ ...message, id });
         });
@@ -316,7 +339,8 @@ export type CompileOutcome =
 export class RunnerPool {
     private workers: RunnerWorker[] = [];
     private compiler: CompilerWorker | null = null;
-    private pchBuilding = new Set<string>();
+    /** 표준 버전별 PCH 만들기 작업 (이미 있으면 바로 끝남) */
+    private pchBuilds = new Map<string, Promise<void>>();
     private compileCache: { key: string; outcome: Promise<CompileOutcome> } | null = null;
     private sandboxInstance: Sandbox | null = null;
     private waiters: Array<() => void> = [];
@@ -350,6 +374,8 @@ export class RunnerPool {
     warmUp(lang: ResolvedLanguage) {
         if (lang.runtime === 'cpp') {
             this.getCompiler();
+            // 코드를 쓰는 동안 미리 만들어 둡니다. (처음 한 번만 몇 초 걸림)
+            if (lang.cppStd) void this.buildPch(lang.cppStd, false);
             return;
         }
         if (lang.runtime === 'java') {
@@ -364,14 +390,22 @@ export class RunnerPool {
         for (const w of this.workers) w.warmUp(lang.runtime);
     }
 
-    /** bits/stdc++.h PCH를 별도 워커에서 만들어 둡니다. (다음 컴파일부터 빨라짐) */
-    private buildPchInBackground(std: string) {
-        if (this.pchBuilding.has(std)) return;
-        this.pchBuilding.add(std);
-        const builder = RunnerPool.createCppCompiler();
-        void builder
-            .request({ type: 'build-pch', std }, 5 * 60_000)
-            .finally(() => builder.terminate());
+    /**
+     * bits/stdc++.h PCH를 별도 워커에서 만들어 IndexedDB에 저장합니다. 이미 있으면 바로 끝납니다.
+     * 실패해도 PCH 없이 컴파일하면 되므로 예외를 던지지 않습니다.
+     */
+    private buildPch(std: string, exceptions: boolean) {
+        const key = `${std}:${exceptions}`;
+        let build = this.pchBuilds.get(key);
+        if (!build) {
+            const builder = RunnerPool.createCppCompiler();
+            build = builder
+                .request({ type: 'build-pch', std, exceptions }, 5 * 60_000)
+                .then(() => {})
+                .finally(() => builder.terminate());
+            this.pchBuilds.set(key, build);
+        }
+        return build;
     }
 
     /** C++/Java 컴파일 (같은 소스면 캐시). 다른 언어는 바로 ok. */
@@ -392,6 +426,8 @@ export class RunnerPool {
 
         const outcome = (async (): Promise<CompileOutcome> => {
             const compiler = this.getCompiler();
+            // PCH 없이 컴파일하면 헤더를 처음부터 읽느라 10초쯤 걸립니다. 만드는 중이면 기다렸다가 씁니다.
+            if (usesBitsStdcxx(source)) await this.buildPch(std, usesExceptions(source));
             const res = await compiler.request(
                 { type: 'compile', source, std },
                 COMPILE_TIMEOUT_MS
@@ -403,7 +439,7 @@ export class RunnerPool {
             }
             if (res.type === 'error') return { ok: false, diagnostics: res.message };
             if (res.type !== 'compile') return { ok: false, diagnostics: '알 수 없는 응답' };
-            if (res.needsPch) this.buildPchInBackground(std);
+            if (res.needsPch) void this.buildPch(std, usesExceptions(source));
             return res.ok && res.artifact
                 ? { ok: true, artifact: res.artifact, diagnostics: res.diagnostics }
                 : { ok: false, diagnostics: res.diagnostics };
@@ -429,7 +465,7 @@ export class RunnerPool {
     ): Promise<string | null> {
         const res = await this.getCompiler().request(message, timeoutMs);
         if (!res || res.type !== 'intel') return null;
-        if (res.needsPch) this.buildPchInBackground(message.std);
+        if (res.needsPch) void this.buildPch(message.std, usesExceptions(message.source));
         return res.output;
     }
 
@@ -500,9 +536,13 @@ export class RunnerPool {
         if (generation !== this.generation) {
             return { status: 'cancelled', output: EMPTY_OUTPUT, timeMs: 0 };
         }
-        if (!res) {
+        if (!res || res.type === 'timeout') {
             this.release(worker, true);
-            return { status: 'timeout', output: EMPTY_OUTPUT, timeMs: timeoutMs };
+            return {
+                status: 'timeout',
+                output: res ? partialOutput(res.partial) : EMPTY_OUTPUT,
+                timeMs: timeoutMs,
+            };
         }
         this.release(worker, false);
         if (res.type === 'error') {

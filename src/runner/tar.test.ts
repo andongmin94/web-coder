@@ -56,14 +56,12 @@ test('일반 파일, 디렉터리, prefix, GNU 긴 이름', () => {
 });
 
 test('저장소의 Python 파일 시스템을 읽는다', () => {
-    const tar = gunzipSync(readFileSync('public/wasm/python-3.11.3.tar.gz'));
-    const files = parseTar(new Uint8Array(tar));
-    assert.deepEqual(
-        files.map((f) => f.path),
-        [
-            'usr/local/lib/python311.zip',
-            'usr/local/lib/python3.11/os.py',
-            'usr/local/lib/python3.11/lib-dynload/.empty',
-        ]
-    );
+    const tar = gunzipSync(readFileSync('public/wasm/python-3.13.17.tar.gz'));
+    const paths = new Set(parseTar(new Uint8Array(tar)).map((f) => f.path));
+    for (const path of [
+        'usr/local/lib/python3.13/os.py',
+        'usr/local/lib/python3.13/collections/__init__.py',
+        'usr/local/lib/python3.13/lib-dynload/.empty',
+    ])
+        assert.ok(paths.has(path), path);
 });
