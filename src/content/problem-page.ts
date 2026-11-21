@@ -1,9 +1,12 @@
-// 문제 페이지(/problem/*) content script: 본문과 예제를 읽어 저장해 둡니다. 화면은 바꾸지 않습니다.
+// 문제 페이지(/problem/*) content script: 본문과 예제를 읽어 저장해 두고,
+// 문제 메뉴의 "제출" 옆에 "웹 코더로 제출" 탭을 붙입니다.
+import { addSolverTab } from './menu.ts';
 import { parseProblemDocument, saveProblem } from './problem.ts';
 
 const id = /^\/problem\/(\d+)\/?$/.exec(location.pathname)?.[1];
 
 const save = () => {
+    addSolverTab();
     if (!id || !document.querySelector('#problem-body')) return;
     try {
         void saveProblem(parseProblemDocument(id, document, location.origin));

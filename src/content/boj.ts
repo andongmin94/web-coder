@@ -1,7 +1,8 @@
 // BOJ /submit 페이지에서 솔버 iframe을 띄우는 content script (격리 world).
-// 페이지는 BOJ 원래 화면 그대로 두고, 제출 버튼 옆에 "웹 코더로 제출" 버튼만 붙입니다.
-// (원래 폼으로 바로 제출하려는 사람을 방해하지 않기 위해 자동으로 열지 않습니다)
-// 버튼을 누르면: 문제/폼 정보 수집 → iframe에 전달, iframe의 제출 요청을 원래 폼으로 처리.
+// 페이지는 BOJ 원래 화면 그대로 두고, 문제 메뉴의 "제출" 옆에 "웹 코더로 제출" 탭만 붙입니다. (menu.ts)
+// (원래 폼으로 바로 제출하려는 사람을 방해하지 않기 위해, 그 탭으로 들어왔을 때만 엽니다)
+// 열면: 문제/폼 정보 수집 → iframe에 전달, iframe의 제출 요청을 원래 폼으로 처리.
+import { addSolverTab, SOLVER_HASH } from './menu.ts';
 import { fetchProblem, loadProblem, problemKey, saveProblem } from './problem.ts';
 import {
     MAIN_REPLY_EVENT,
@@ -41,8 +42,6 @@ const injectStyle = () => {
             background: #0b6bcb; color: #fff; font-weight: 600; cursor: pointer;
         }
         .webcoder-open:hover { background: #0a5cad; }
-        /* 제출 버튼 바로 옆에 놓일 때: 같은 줄, 같은 높이 */
-        .webcoder-open.webcoder-inline { margin: 0 0 0 8px; padding: 6px 12px; vertical-align: middle; }
         .webcoder-notice {
             margin: 0 0 12px; padding: 10px 12px; border-radius: 4px;
             background: #fff8e1; border: 1px solid #f0c36d; color: #5d4500;
@@ -141,6 +140,9 @@ const showNativeForm = (notice?: string) => {
     removeListener = null;
     document.getElementById(ROOT_ID)?.remove();
     document.documentElement.classList.remove('webcoder-open-page');
+    // 새로 고침했을 때 다시 웹 코더가 뜨지 않게 주소의 표시를 지웁니다.
+    if (location.hash === SOLVER_HASH)
+        history.replaceState(null, '', location.pathname + location.search);
     const form = getForm();
     if (!form) return;
     injectStyle();
@@ -155,21 +157,14 @@ const showNativeForm = (notice?: string) => {
         box.textContent = notice;
         form.before(box);
     }
+    // 문제 메뉴에 탭을 붙입니다. 메뉴를 못 찾으면(BOJ 화면이 바뀐 경우) 폼 위에 버튼을 둡니다.
+    if (addSolverTab(() => void mount())) return;
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'webcoder-open';
     button.textContent = '웹 코더로 제출';
     button.addEventListener('click', () => void mount());
-    // 원래 제출 버튼 옆에 둡니다. 버튼을 못 찾으면(BOJ 화면이 바뀐 경우) 폼 위에 둡니다.
-    const submit = form.querySelector<HTMLElement>(
-        '#submit_button, button[type="submit"], input[type="submit"]'
-    );
-    if (submit) {
-        button.classList.add('webcoder-inline');
-        submit.after(button);
-    } else {
-        form.before(button);
-    }
+    form.before(button);
 };
 
 const mount = async () => {
@@ -277,5 +272,9 @@ const waitForForm = async (): Promise<HTMLFormElement | null> => {
 
 void (async () => {
     if (!(await waitForForm())) return;
-    showNativeForm();
+    // "웹 코더로 제출" 탭으로 들어왔으면 바로 열고, 그냥 "제출"로 들어왔으면 원래 화면을 둡니다.
+    const open = location.hash === SOLVER_HASH;
+    if (open) addSolverTab(() => void mount());
+    else showNativeForm();
+    if (open) void mount();
 })();
