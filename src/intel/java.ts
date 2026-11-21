@@ -3,6 +3,7 @@
 // - 자동완성/시그니처/호버: JDK 색인(SDK 클래스 시그니처) + 소스의 선언을 보고 타입을 추론
 //   예) Scanner sc → sc. → nextInt…, List<Integer> list → list.get(0). → Integer 멤버
 import type { JavaClass, JavaIndex, JavaMember } from './classfile.ts';
+import { enclosingClasses, parseUserClasses, type UserClass } from './java-source.ts';
 import {
     wordStart,
     type IntelCompletion,
@@ -126,8 +127,13 @@ const substitute = (type: string, map: Record<string, string>) =>
 // ── 소스 분석 ────────────────────────────────────────────────────────
 
 const TYPE_RE = String.raw`(?:[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)(?:\s*<[^;(){}=]*?>)?(?:\s*\[\s*\])*`;
+/** 선언 앞에 붙는 수식어 (static int[] arr 처럼 필드에 흔함) */
+const MODIFIERS_RE = String.raw`(?:(?:public|private|protected|static|final|volatile|transient)\s+)*`;
+/** `int n, m;` `int a = 1, b;` 에서 첫 이름 뒤에 이어지는 이름들 */
+const MORE_NAMES_RE =
+    /^(?:\s*\[\s*\])*(?:\s*=[^,;(){}]*)?((?:\s*,\s*[A-Za-z_]\w*(?:\s*\[\s*\])*(?:\s*=[^,;(){}]*)?)+)\s*;/;
 const DECL_RE = new RegExp(
-    String.raw`(?:^|[;{}(,]|\bfinal\s)\s*(${TYPE_RE})\s+([A-Za-z_]\w*)\s*(?=[=;,):\[])`,
+    String.raw`(?:^|[;{}(,])\s*${MODIFIERS_RE}(${TYPE_RE})\s+([A-Za-z_]\w*)\s*(?=[=;,):\[])`,
     'gm'
 );
 
@@ -149,6 +155,14 @@ export const declarations = (code: string, pos: number) => {
                 resolved = init[2] ? init[2].replace(/<\s*>$/, '') : 'String';
             }
             vars.set(name, resolved);
+            // 같은 타입으로 이어서 선언한 이름들
+            const more = MORE_NAMES_RE.exec(text.slice(m.index! + m[0].length));
+            if (more && type !== 'var') {
+                for (const part of more[1].split(',')) {
+                    const other = /^\s*([A-Za-z_]\w*)((?:\s*\[\s*\])*)/.exec(part);
+                    if (other) vars.set(other[1], type + other[2].replace(/\s+/g, ''));
+                }
+            }
         }
         for (const m of text.matchAll(
             new RegExp(String.raw`for\s*\(\s*(?:final\s+)?(${TYPE_RE})\s+([A-Za-z_]\w*)\s*:`, 'g')
@@ -173,8 +187,60 @@ const importsOf = (code: string) => {
 
 // ── 엔진 ─────────────────────────────────────────────────────────────
 
+let lastContext: { index: JavaIndex; code: string; merged: JavaIndex; user: UserClass[] } | null =
+    null;
+
+/** 분석 컨텍스트: JDK 색인에 사용자 클래스를 얹고, 둘러싼 클래스의 필드를 변수로 더합니다. */
+const createContext = (index: JavaIndex, code: string, pos: number, varsUntil: number): Ctx => {
+    if (!lastContext || lastContext.index !== index || lastContext.code !== code) {
+        const user = parseUserClasses(code);
+        const classes = { ...index.classes };
+        for (const cls of user) classes[cls.n] = cls;
+        lastContext = { index, code, merged: { classes }, user };
+    }
+    const { merged, user } = lastContext;
+    const vars = declarations(code, varsUntil);
+    // 커서보다 아래에 선언된 필드도 보이게 합니다.
+    for (const cls of enclosingClasses(user, pos))
+        for (const field of cls.f) if (!vars.has(field.n)) vars.set(field.n, field.t);
+    return { index: merged, user, code, pos, vars, imports: importsOf(code) };
+};
+
+/** 수신 객체 없이 부른 메서드: 둘러싼 클래스의 것부터, 없으면 소스의 아무 클래스에서 */
+const userMethods = (ctx: Ctx, name?: string) => {
+    const enclosing = enclosingClasses(ctx.user, ctx.pos);
+    const ordered = [...enclosing, ...ctx.user.filter((c) => !enclosing.includes(c))];
+    const seen = new Set<string>();
+    const result: (JavaMember & { owner: string })[] = [];
+    for (const cls of ordered) {
+        for (const method of cls.m) {
+            if (name !== undefined && method.n !== name) continue;
+            const key = `${method.n}(${(method.p ?? []).join(',')})`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            result.push({ ...method, owner: cls.n });
+        }
+        // 이름으로 찾을 때는 가장 가까운 클래스의 것만
+        if (name !== undefined && result.length) break;
+    }
+    return result;
+};
+
+/** 풀이에서 자주 쓰는 클래스 (전역 목록에서 위로) */
+const COMMON_CLASSES = new Set(
+    (
+        'String StringBuilder Integer Long Double Character Boolean Math System Object ' +
+        'Scanner BufferedReader BufferedWriter InputStreamReader OutputStreamWriter PrintWriter StringTokenizer ' +
+        'IOException List ArrayList LinkedList Map HashMap TreeMap LinkedHashMap Set HashSet TreeSet LinkedHashSet ' +
+        'Queue Deque ArrayDeque PriorityQueue Stack Arrays Collections Comparator Iterator Random BigInteger BigDecimal'
+    ).split(' ')
+);
+
 type Ctx = {
+    /** JDK 색인 + 사용자 소스의 클래스 */
     index: JavaIndex;
+    /** 사용자 소스에 선언된 클래스 */
+    user: UserClass[];
     code: string;
     pos: number;
     vars: Map<string, string>;
@@ -291,7 +357,23 @@ const typeOf = (ctx: Ctx, expr: string): Resolved => {
         const arr = /^(\w+)((?:\[[^\]]*\])+)$/.exec(first);
         const name = arr ? arr[1] : first;
         const declared = ctx.vars.get(name);
-        if (declared) {
+        const ownCall = /^(\w+)\s*\((.*)\)((?:\[[^\]]*\])*)$/s.exec(first);
+        const self = enclosingClasses(ctx.user, ctx.pos)[0];
+        if (name === 'this' && self) {
+            current = { type: self.n, isStatic: false };
+        } else if (ownCall && userMethods(ctx, ownCall[1]).length) {
+            // solve(1, 2). 처럼 같은 클래스의 메서드를 부른 결과
+            const arity = ownCall[2].trim() ? splitTop(ownCall[2]).length : 0;
+            const candidates = userMethods(ctx, ownCall[1]);
+            const method = candidates.find((m) => (m.p?.length ?? 0) === arity) ?? candidates[0];
+            const ref = parseTypeRef(method.t);
+            ref.dims = Math.max(0, ref.dims - (ownCall[3].match(/\[/g) ?? []).length);
+            const type = formatType(ref);
+            current = {
+                type: PRIMITIVES.has(type) ? (BOXED[type] ?? type) : type,
+                isStatic: false,
+            };
+        } else if (declared) {
             const ref = parseTypeRef(declared);
             ref.dims = Math.max(0, ref.dims - (arr ? (arr[2].match(/\[/g) ?? []).length : 0));
             current = { type: formatType(ref), isStatic: false };
@@ -387,8 +469,8 @@ const toItems = (members: Members, wantStatic: boolean): IntelCompletion[] => {
 
 export const javaComplete = (index: JavaIndex, code: string, pos: number, explicit: boolean) => {
     const from = wordStart(code, pos);
-    const vars = declarations(code, from);
-    const ctx: Ctx = { index, code, pos, vars, imports: importsOf(code) };
+    const ctx = createContext(index, code, pos, from);
+    const { vars } = ctx;
     const dot = code.slice(0, from).trimEnd();
     if (dot.endsWith('.')) {
         const receiver = receiverBefore(code, dot.length - 1);
@@ -400,16 +482,52 @@ export const javaComplete = (index: JavaIndex, code: string, pos: number, explic
     const items: IntelCompletion[] = [];
     for (const [name, type] of vars)
         items.push({ label: name, kind: 'variable', detail: shortType(type), boost: 3 });
+    // 직접 만든 메서드 (같은 이름은 하나로)
+    const methodItems = new Map<string, IntelCompletion & { overloads: number }>();
+    for (const m of userMethods(ctx)) {
+        const existing = methodItems.get(m.n);
+        if (existing) {
+            existing.overloads++;
+            continue;
+        }
+        const params = m.p ?? [];
+        methodItems.set(m.n, {
+            label: m.n,
+            kind: 'function',
+            detail: `(${params.join(', ')}) → ${m.t}`,
+            apply: params.length
+                ? `${m.n}(${params.map((p) => `\${${paramPlaceholder(p)}}`).join(', ')})`
+                : `${m.n}()`,
+            boost: 3,
+            overloads: 1,
+        });
+    }
+    for (const { overloads, ...item } of methodItems.values())
+        items.push(
+            overloads > 1 ? { ...item, detail: `${item.detail}  (+${overloads - 1})` } : item
+        );
     for (const t of TEMPLATES) items.push({ ...t, boost: 1 });
     for (const kw of KEYWORDS) items.push({ label: kw, kind: 'keyword' });
     const seenClass = new Set<string>();
+    // 직접 만든 클래스
+    for (const cls of ctx.user) {
+        if (seenClass.has(cls.n)) continue;
+        seenClass.add(cls.n);
+        items.push({ label: cls.n, kind: cls.iface ? 'type' : 'class', boost: 3 });
+    }
     for (const fqn of Object.keys(index.classes)) {
         const pkg = fqn.slice(0, fqn.lastIndexOf('.'));
         const cls = index.classes[fqn];
         if (cls.n.includes('.') || seenClass.has(cls.n)) continue;
         if (ctx.imports.packages.has(pkg) || ctx.imports.classes.get(cls.n) === fqn) {
             seenClass.add(cls.n);
-            items.push({ label: cls.n, kind: cls.iface ? 'type' : 'class', detail: pkg });
+            items.push({
+                label: cls.n,
+                kind: cls.iface ? 'type' : 'class',
+                detail: pkg,
+                // String이 StreamTokenizer보다, ArrayList가 ArrayStoreException보다 먼저 오게
+                boost: COMMON_CLASSES.has(cls.n) ? 2 : undefined,
+            });
         }
     }
     return { from, items };
@@ -438,20 +556,28 @@ export const javaSignature = (
     }
     if (open < 0) return null;
     const head = code.slice(0, open).trimEnd();
-    const ctx: Ctx = { index, code, pos, vars: declarations(code, open), imports: importsOf(code) };
+    const ctx = createContext(index, code, pos, open);
     let candidates: JavaMember[] = [];
     const ctor = /new\s+([\w.]+)\s*(?:<[^(]*>)?$/.exec(head);
     if (ctor) {
         const fqn = resolveClass(ctx, ctor[1]);
-        if (fqn) candidates = index.classes[fqn].c.map((c) => ({ ...c, n: index.classes[fqn].n }));
+        if (fqn) {
+            const cls = ctx.index.classes[fqn];
+            candidates = cls.c.map((c) => ({ ...c, n: cls.n }));
+        }
     } else {
         const name = /([\w$]+)$/.exec(head)?.[1];
         if (!name) return null;
         const before = head.slice(0, head.length - name.length).trimEnd();
-        if (!before.endsWith('.')) return null;
-        const resolved = typeOf(ctx, receiverBefore(code, before.length - 1));
-        if (!resolved) return null;
-        candidates = membersOf(ctx, resolved.type).methods.filter((m) => m.n === name);
+        if (before.endsWith('.')) {
+            const resolved = typeOf(ctx, receiverBefore(code, before.length - 1));
+            if (!resolved) return null;
+            candidates = membersOf(ctx, resolved.type).methods.filter((m) => m.n === name);
+        } else {
+            // 직접 만든 메서드를 수신 객체 없이 부른 경우
+            candidates = userMethods(ctx, name);
+            if (!candidates.length) return null;
+        }
     }
     const seen = new Set<string>();
     const sigs: IntelSignature[] = [];
@@ -478,13 +604,7 @@ export const javaHover = (index: JavaIndex, code: string, pos: number): string |
     while (end < code.length && /[\w$]/.test(code[end])) end++;
     const word = code.slice(start, end);
     if (!word) return null;
-    const ctx: Ctx = {
-        index,
-        code,
-        pos,
-        vars: declarations(code, start),
-        imports: importsOf(code),
-    };
+    const ctx = createContext(index, code, pos, start);
     const before = code.slice(0, start).trimEnd();
     if (before.endsWith('.')) {
         const resolved = typeOf(ctx, receiverBefore(code, before.length - 1));
@@ -501,8 +621,14 @@ export const javaHover = (index: JavaIndex, code: string, pos: number): string |
     }
     const declared = ctx.vars.get(word);
     if (declared) return `${shortType(declared)} ${word}`;
+    const own = userMethods(ctx, word);
+    if (own.length && /^\s*\(/.test(code.slice(end)))
+        return own
+            .slice(0, 6)
+            .map((m) => `${m.t} ${m.n}(${(m.p ?? []).join(', ')})`)
+            .join('\n');
     const fqn = resolveClass(ctx, word);
-    return fqn ? `${index.classes[fqn].iface ? 'interface' : 'class'} ${fqn}` : null;
+    return fqn ? `${ctx.index.classes[fqn].iface ? 'interface' : 'class'} ${fqn}` : null;
 };
 
 export const createJavaIntel = (

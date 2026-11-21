@@ -223,8 +223,10 @@ self.addEventListener('message', async (event: MessageEvent<CompilerRequest>) =>
     try {
         if (req.type === 'complete') {
             const extra = ['-Xclang', `-code-completion-at=main.cpp:${req.line}:${req.col}`];
-            // 멤버 접근(. -> ::)일 때는 전역 이름 목록이 필요 없어 훨씬 빠릅니다.
+            // 멤버 접근(. ->)일 때는 전역 이름 목록이 필요 없어 훨씬 빠릅니다.
             if (req.memberOnly) extra.push('-Xclang', '-no-code-completion-ns-level-decls');
+            // 전역 목록에는 매크로(INT_MAX, 사용자가 #define한 것)도 넣습니다.
+            else extra.push('-Xclang', '-code-completion-macros');
             const res = await analyze(req.source, req.std, extra);
             reply({ type: 'intel', id: req.id, ...res });
             return;

@@ -93,3 +93,64 @@ test('호버', () => {
     const { code, pos } = at(PRE + 'Scanner sc = new Scanner(System.in);\n s|c.nextInt();');
     assert.equal(javaHover(index, code, pos), 'Scanner sc');
 });
+
+const USER =
+    'import java.util.*;\nimport java.io.*;\npublic class Main {\n' +
+    '  static int n, m; static int[] arr; static Map<String, List<Integer>> mp = new HashMap<>();\n' +
+    '  static class Node implements Comparable<Node> {\n    int v; long cost;\n' +
+    '    Node(int v, long c) { this.v = v; cost = c; }\n' +
+    '    public int compareTo(Node o) { return Long.compare(cost, o.cost); }\n    int weight() { return v; }\n  }\n' +
+    '  record Point(int x, int y) {}\n  enum Dir { UP, DOWN }\n' +
+    '  static Node best(int a, long b) { return null; }\n  static int solve(int a) { return a; }\n' +
+    '  public static void main(String[] args) throws IOException {\n' +
+    '    PriorityQueue<Node> pq = new PriorityQueue<>();\n    Node node = new Node(1, 2);\n';
+
+test('수식어가 붙은 필드와 쉼표로 이은 선언', () => {
+    const v = declarations(USER, 9999);
+    assert.equal(v.get('n'), 'int');
+    assert.equal(v.get('m'), 'int');
+    assert.equal(v.get('arr'), 'int[]');
+    assert.equal(v.get('mp'), 'Map<String, List<Integer>>');
+    assert.ok(labels(USER + 'arr.|').includes('length'));
+    assert.ok(labels(USER + 'mp.get("a").|').includes('add'));
+});
+
+test('직접 만든 클래스의 멤버', () => {
+    const l = labels(USER + 'node.|');
+    assert.ok(l.includes('v') && l.includes('cost') && l.includes('weight'));
+    // 컬렉션에서 꺼낸 원소, 직접 만든 메서드의 반환값
+    assert.ok(labels(USER + 'pq.poll().|').includes('weight'));
+    assert.ok(labels(USER + 'best(1, 2).|').includes('cost'));
+    assert.ok(labels(USER + 'for (Node nd : pq) { nd.|').includes('v'));
+});
+
+test('record와 enum', () => {
+    assert.deepEqual(
+        labels(USER + 'Point p = new Point(1, 2); p.|').filter((x) => x === 'x' || x === 'y'),
+        ['x', 'y']
+    );
+    assert.ok(labels(USER + 'Dir.|').includes('UP'));
+});
+
+test('직접 만든 메서드: 전역 목록과 시그니처', () => {
+    const { code, pos } = at(USER + 'so|');
+    const items = javaComplete(index, code, pos, false)!.items;
+    const solve = items.find((i) => i.label === 'solve')!;
+    assert.equal(solve.kind, 'function');
+    assert.equal(solve.apply, 'solve(${int a})');
+
+    const call = at(USER + 'best(1, |');
+    const sigs = javaSignature(index, call.code, call.pos)!;
+    assert.equal(sigs[0].label, 'best(int a, long b) → Node');
+    assert.equal(sigs[0].label.slice(...sigs[0].active!), 'long b');
+
+    const ctor = at(USER + 'new Node(|');
+    assert.equal(javaSignature(index, ctor.code, ctor.pos)![0].label, 'Node(int v, long c)');
+});
+
+test('자주 쓰는 클래스가 먼저 온다', () => {
+    const { code, pos } = at(USER + 'Str|');
+    const items = javaComplete(index, code, pos, false)!.items;
+    const boost = (label: string) => items.find((i) => i.label === label)?.boost ?? 0;
+    assert.ok(boost('String') > boost('StreamTokenizer'));
+});

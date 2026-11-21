@@ -200,24 +200,32 @@ export const createPythonIntel = (): LanguageIntel => {
                 detail: item.detail,
                 apply:
                     item.insertText && item.insertText !== item.label ? item.insertText : undefined,
-                // 밑줄로 시작하는 내부 이름은 아래로
-                boost: String(item.label).startsWith('_') ? -2 : 0,
+                // 밑줄로 시작하는 내부 이름(__doc__, __init__ 등)은 맨 아래로
+                boost: String(item.label).startsWith('__')
+                    ? -50
+                    : String(item.label).startsWith('_')
+                      ? -20
+                      : 0,
             }));
             return { from, items };
         },
         async diagnose(code) {
             await sync(code);
             const want = docVersion;
-            if (!lastDiagnostics || lastDiagnostics.version < want) {
+            // 지금 문서 버전의 진단이 올 때까지 기다립니다. 그 사이에 이전 버전의 진단이 먼저 도착할 수
+            // 있어서(입력 중에 자동완성이 문서를 계속 갱신함) 한 번 깨어났다고 끝내면 안 됩니다.
+            // 그러면 옛 위치의 밑줄이 새 코드의 엉뚱한 자리에 그려집니다.
+            const deadline = Date.now() + 5_000;
+            while ((!lastDiagnostics || lastDiagnostics.version < want) && Date.now() < deadline) {
                 await new Promise<void>((resolve) => {
-                    const timer = setTimeout(resolve, 5_000);
+                    const timer = setTimeout(resolve, Math.max(0, deadline - Date.now()));
                     diagnosticWaiters.push(() => {
                         clearTimeout(timer);
                         resolve();
                     });
                 });
             }
-            if (!lastDiagnostics || docText !== code) return [];
+            if (!lastDiagnostics || lastDiagnostics.version !== want || docText !== code) return [];
             return lastDiagnostics.items.map((d): IntelDiagnostic => ({
                 from: fromPosition(code, d.range.start),
                 to: Math.max(

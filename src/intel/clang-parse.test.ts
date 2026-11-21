@@ -16,7 +16,7 @@ test('멤버 완성: 오버로드는 하나로 묶고 함수는 스니펫으로'
         'COMPLETION: operator= : [#vector &#]operator=(<#const vector &#>)',
         'COMPLETION: value_type : value_type',
     ].join('\n');
-    const items = parseClangCompletions(out);
+    const items = parseClangCompletions(out, { member: true });
     const push = items.find((i) => i.label === 'push_back')!;
     assert.equal(push.kind, 'method');
     assert.equal(push.apply, 'push_back(${const_reference x})');
@@ -54,4 +54,51 @@ test('진단: 바이트 열을 offset으로, note는 붙이기', () => {
 
 test('offsetOf: 줄/열', () => {
     assert.equal(offsetOf('ab\ncd', 2, 2), 4);
+});
+
+test('전역 완성: 키워드, 이름공간, 종류 분류, 순위', () => {
+    const out = [
+        'COMPLETION: Pattern : return <#expression#>;',
+        'COMPLETION: Pattern : [#bool#]false',
+        'COMPLETION: const',
+        'COMPLETION: MAXN',
+        'COMPLETION: chrono : chrono::',
+        'COMPLETION: codecvt : codecvt<<#class#>>',
+        'COMPLETION: cout : [#ostream#]cout',
+        'COMPLETION: count_total : [#int#]count_total',
+        'COMPLETION: INF : [#const int#]INF',
+        'COMPLETION: solve : [#int#]solve(<#int a#>)',
+        'COMPLETION: pair<type-parameter-0-0, type-parameter-0-1> : pair<<#class#>, <#class#>>()',
+        'COMPLETION: nullptr_t (Hidden) : std::__2::nullptr_t',
+    ].join('\n');
+    const items = parseClangCompletions(out, { source: 'int count_total; int solve(int a);' });
+    const kind = (label: string) => items.find((i) => i.label === label)?.kind;
+    assert.equal(kind('return'), 'keyword');
+    assert.equal(kind('false'), 'keyword');
+    assert.equal(kind('const'), 'keyword');
+    assert.equal(kind('MAXN'), 'constant');
+    assert.equal(kind('chrono'), 'namespace');
+    assert.equal(kind('codecvt'), 'class');
+    assert.equal(kind('cout'), 'variable');
+    assert.equal(kind('INF'), 'constant');
+    assert.equal(kind('solve'), 'function');
+    assert.ok(!items.some((i) => i.label.includes('<') || i.label.includes('Hidden')));
+    // 사용자 코드에 나온 이름 > 자주 쓰는 이름 > 나머지
+    const boost = (label: string) => items.find((i) => i.label === label)?.boost ?? 0;
+    assert.ok(boost('count_total') > boost('cout'));
+    assert.ok(boost('cout') > boost('codecvt'));
+});
+
+test('멤버 완성: 자기 클래스 이름은 빼고 상속 멤버는 남긴다', () => {
+    const out = [
+        'COMPLETION: P : P::',
+        'COMPLETION: x : [#int#]x',
+        'COMPLETION: base_value (InBase) : [#int#]base_value',
+        'COMPLETION: Pattern : return <#expression#>;',
+    ].join('\n');
+    const items = parseClangCompletions(out, { member: true });
+    assert.deepEqual(
+        items.map((i) => `${i.label}:${i.kind}`),
+        ['x:field', 'base_value:field']
+    );
 });

@@ -24,17 +24,26 @@ export const createCppIntel = (pool: RunnerPool, std: string): LanguageIntel => 
     async complete(code, pos, explicit) {
         const from = wordStart(code, pos);
         const before = code.slice(Math.max(0, from - 2), from);
-        const memberOnly = /(\.|->|::)$/.test(before);
-        if (!explicit && !memberOnly && pos - from < 2) return null;
+        const member = /(\.|->)$/.test(before);
+        // `std::` 처럼 이름공간 뒤에서는 이름공간 수준의 선언이 필요하므로 멤버 전용 모드를 쓰지 않습니다.
+        const scoped = /::$/.test(before);
+        if (!explicit && !member && !scoped && pos - from < 2) return null;
         const output = await pool.cppAnalyze({
             type: 'complete',
             source: code,
             std,
             ...clangPosition(code, from),
-            memberOnly,
+            memberOnly: member,
         });
         if (output == null) return null;
-        return { from, items: parseClangCompletions(output) };
+        return {
+            from,
+            items: parseClangCompletions(output, {
+                member,
+                source: scoped ? undefined : code,
+                keywords: !member && !scoped,
+            }),
+        };
     },
 
     async signature(code, pos) {

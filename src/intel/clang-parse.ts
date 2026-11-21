@@ -29,38 +29,133 @@ const snippet = (name: string, pattern: string) => {
     return `${name}(${args.map((a) => `\${${a.replace(/[{}]/g, '')}}`).join(', ')})`;
 };
 
-export const parseClangCompletions = (output: string): IntelCompletion[] => {
+const KEYWORDS = new Set(
+    (
+        'alignas alignof auto bool break case catch char class const constexpr const_cast continue decltype default ' +
+        'delete do double dynamic_cast else enum explicit extern false float for friend goto if inline int long ' +
+        'mutable namespace new noexcept nullptr operator private protected public register reinterpret_cast return ' +
+        'short signed sizeof static static_assert static_cast struct switch template this throw true try typedef ' +
+        'typeid typename union unsigned using virtual void volatile wchar_t while char8_t char16_t char32_t concept ' +
+        'requires consteval constinit co_await co_return co_yield final override'
+    ).split(' ')
+);
+
+/** 풀이에서 자주 쓰는 이름. clang은 우선순위를 알려 주지 않아서(이름순), 이 이름들을 위로 올립니다. */
+const COMMON = new Set(
+    (
+        'cout cin cerr endl vector string pair map set queue stack deque priority_queue unordered_map unordered_set ' +
+        'multiset multimap tuple array bitset sort stable_sort min max swap abs reverse lower_bound upper_bound ' +
+        'binary_search memset memcpy fill accumulate printf scanf puts getline to_string stoi stoll make_pair ' +
+        'make_tuple get tie greater less size_t int64_t iota unique next_permutation prev_permutation gcd lcm ' +
+        'min_element max_element find count sqrt pow ceil floor round INT_MAX INT_MIN LLONG_MAX LLONG_MIN ' +
+        'begin end push_back emplace_back pop_back size empty clear front back top push pop insert erase first second'
+    ).split(' ')
+);
+
+/** 멤버 목록에서 거의 쓰지 않아 아래로 내릴 이름 */
+const RARE_MEMBERS = new Set(
+    'cbegin cend crbegin crend get_allocator max_size shrink_to_fit key_comp value_comp hash_function key_eq'.split(
+        ' '
+    )
+);
+
+export type ClangCompletionContext = {
+    /** 멤버 접근(`.`, `->`) 뒤의 목록인지 */
+    member?: boolean;
+    /** 사용자 소스. 여기에 이미 나온 이름(직접 선언했거나 쓰고 있는 것)을 위로 올립니다. */
+    source?: string;
+    /**
+     * 문장 키워드(if, for, while 등)를 채워 넣을지. clang은 이 키워드들을 코드 패턴 옵션을 켰을 때만
+     * 주기 때문에, 일반 위치의 전역 목록에는 직접 넣습니다.
+     */
+    keywords?: boolean;
+};
+
+/** clang이 기본 목록에 넣지 않는 문장·선언 키워드 */
+const STATEMENT_KEYWORDS =
+    'if else for while do switch case default break continue struct class enum union namespace template try catch throw public private protected'.split(
+        ' '
+    );
+
+export const parseClangCompletions = (
+    output: string,
+    context: ClangCompletionContext = {}
+): IntelCompletion[] => {
+    const member = context.member === true;
+    const used = new Set(context.source?.match(/[A-Za-z_]\w*/g) ?? []);
     const byLabel = new Map<string, IntelCompletion & { overloads: number }>();
+    const add = (item: IntelCompletion) => {
+        const existing = byLabel.get(item.label);
+        if (existing) existing.overloads++;
+        else byLabel.set(item.label, { ...item, overloads: 1 });
+    };
+    const boostOf = (name: string, kind: IntelCompletion['kind']) => {
+        if (member) return RARE_MEMBERS.has(name) ? -5 : COMMON.has(name) ? 5 : undefined;
+        let boost = 0;
+        if (used.has(name)) boost += 30;
+        if (COMMON.has(name)) boost += 20;
+        if (kind === 'keyword') boost += 10;
+        return boost || undefined;
+    };
+
     for (const line of output.split('\n')) {
         const m = /^COMPLETION: (.+?)(?: : (.*))?$/.exec(line.trimEnd());
         if (!m) continue;
-        const name = m[1].trim();
-        const pattern = m[2] ?? name;
-        if (!name || name === 'Pattern' || /^operator\W/.test(name) || name.startsWith('~'))
+        let name = m[1].trim();
+
+        // `Pattern : return <#expression#>;` 처럼 이름 없이 오는 문법 조각에서 키워드를 꺼냅니다.
+        if (name === 'Pattern') {
+            const keyword = /^[A-Za-z_]\w*/.exec((m[2] ?? '').replace(/^\[#[^#]*#\]/, ''))?.[0];
+            if (keyword && KEYWORDS.has(keyword) && !member)
+                add({ label: keyword, kind: 'keyword', boost: boostOf(keyword, 'keyword') });
             continue;
+        }
+        if (/ \(Hidden\)/.test(name)) continue; // 가려진 선언
+        name = name.replace(/ \(InBase\)$/, ''); // 상속받은 멤버
+        const pattern = m[2] ?? name;
+        if (!name || /^operator\W/.test(name) || name.startsWith('~')) continue;
+        if (name.includes('<') || name.includes(' ')) continue; // 부분 특수화, 추론 가이드
         if (/^__|^_[A-Z]/.test(name)) continue; // 구현 내부 이름
 
         const isCall = pattern.includes(`${name}(`);
         const type = resultType(pattern);
-        let kind: IntelCompletion['kind'] = isCall ? 'method' : type ? 'variable' : 'type';
-        if (/\(Hidden\)|\(InBase\)/.test(pattern)) continue;
-        if (!isCall && !type) kind = /^[a-z]/.test(name) ? 'namespace' : 'class';
+        let kind: IntelCompletion['kind'];
+        if (m[2] === undefined) {
+            // 패턴 없이 이름만: 키워드 또는 매크로
+            kind = KEYWORDS.has(name) ? 'keyword' : 'constant';
+            if (kind === 'keyword' && member) continue;
+        } else if (pattern === `${name}::`) {
+            // 멤버 목록에 끼어 오는 자기 클래스 이름(`P : P::`)은 뺍니다.
+            if (member) continue;
+            kind = 'namespace';
+        } else if (isCall) {
+            kind = member ? 'method' : 'function';
+        } else if (type) {
+            kind = member
+                ? 'field'
+                : /^const\b/.test(type) || /^[A-Z][A-Z0-9_]*$/.test(name)
+                  ? 'constant'
+                  : 'variable';
+        } else if (pattern === name && /^[A-Z][A-Z0-9_]*$/.test(name)) {
+            kind = 'constant'; // 매크로 상수 (INT_MAX, 사용자가 #define한 MAXN)
+        } else {
+            kind = 'class';
+        }
         const detail = isCall
             ? plain(pattern.replace(/^\[#[^#]*#\]/, '')).slice(name.length)
             : type;
-
-        const existing = byLabel.get(name);
-        if (existing) {
-            existing.overloads++;
-            continue;
-        }
-        byLabel.set(name, {
+        add({
             label: name,
             kind,
             detail: isCall ? `${detail}${type ? ` → ${type}` : ''}` : detail,
             apply: isCall ? snippet(name, pattern) : undefined,
-            overloads: 1,
+            boost: boostOf(name, kind),
         });
+    }
+    if (context.keywords && !member) {
+        for (const keyword of STATEMENT_KEYWORDS)
+            if (!byLabel.has(keyword))
+                add({ label: keyword, kind: 'keyword', boost: boostOf(keyword, 'keyword') });
     }
     return [...byLabel.values()].map(({ overloads, ...item }) =>
         overloads > 1
