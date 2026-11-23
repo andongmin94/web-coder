@@ -91,7 +91,8 @@ export const offsetOf = (code: string, line: number, col: number, byteColumn = f
 /** pos에서 끝나는 식별자 단어의 시작 */
 export const wordStart = (code: string, pos: number) => {
     let i = pos;
-    while (i > 0 && /[\w$]/.test(code[i - 1])) i--;
+    // 한글 등 유니코드 식별자도 단어로 칩니다. (Java, JS, Python 모두 허용)
+    while (i > 0 && /[\p{L}\p{N}_$]/u.test(code[i - 1])) i--;
     return i;
 };
 

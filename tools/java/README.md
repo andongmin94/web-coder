@@ -8,7 +8,7 @@ OpenJDK의 javac와 [TeaVM](https://teavm.org)(Java 바이트코드 → WebAssem
 | ---------------------------------- | --------------------------------------------------------------------------------- |
 | `public/java/compiler.wasm`        | javac + TeaVM (wasm-gc)                                                           |
 | `public/java/compile-classlib.bin` | javac가 참조하는 표준 라이브러리 시그니처 (+ `Scanner`, `InputMismatchException`) |
-| `public/java/runtime-classlib.bin` | TeaVM 표준 라이브러리 구현 (+ stdin 패치, `Scanner`)                              |
+| `public/java/runtime-classlib.bin` | TeaVM 표준 라이브러리 구현 (+ stdin 패치, `Scanner`, `Formatter`)                 |
 | `vendor/teavm/wasm-runtime.js`     | TeaVM wasm-gc JS 런타임                                                           |
 
 ## 다시 만들기
@@ -27,6 +27,10 @@ JAVA_HOME=/path/to/jdk-25 tools/java/build.sh
 - `patch/templates/Scanner.java.tmpl`, `InputMismatchException.java.tmpl`
   TeaVM에 없는 `java.util.Scanner`를 BOJ 풀이에서 쓰는 범위로 구현합니다.
   같은 소스로 TeaVM 런타임용(`TScanner`)과 javac SDK용(`java.util.Scanner`)을 만듭니다.
+- `patch/org/teavm/classlib/java/util/TFormatter.java`
+  TeaVM의 `String.format`/`printf`는 `%f`를 `DecimalFormat`(HALF_EVEN)으로 반올림하고 `%e`, `%g`가 없습니다.
+  OpenJDK처럼 `Double.toString`의 가장 짧은 10진 표기를 HALF_UP으로 반올림하고 `%e`, `%g`를 지원하게 고칩니다.
+  (`String.format("%.2f", 1.005)`: TeaVM 원본 `1.00`, OpenJDK `1.01`)
 - `patch-thread.mjs`
   TeaVM의 `Thread`에 없는 `Thread(ThreadGroup, Runnable, String, long)` 계열 생성자와 `ThreadGroup`을 추가합니다.
   (`new Thread(null, r, "", 1 << 26).start()` 관용구용. 스레드 그룹과 스택 크기는 무시)

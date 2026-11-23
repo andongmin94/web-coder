@@ -154,3 +154,21 @@ test('자주 쓰는 클래스가 먼저 온다', () => {
     const boost = (label: string) => items.find((i) => i.label === label)?.boost ?? 0;
     assert.ok(boost('String') > boost('StreamTokenizer'));
 });
+
+test('세미콜론 없는 긴 필드 선언(입력 중)도 금방 파싱한다', async () => {
+    const { parseUserClasses } = await import('./java-source.ts');
+    const parts = Array.from({ length: 40 }, (_, i) => `a${i} = ${i}`).join(', ');
+    const started = performance.now();
+    parseUserClasses(`class Main {\n    static int ${parts}\n}`);
+    assert.ok(performance.now() - started < 200);
+    const [main] = parseUserClasses('class Main { static int a = 1, b[], c; long d; }');
+    assert.deepEqual(
+        main.f.map((f) => f.n),
+        ['a', 'b', 'c', 'd']
+    );
+});
+
+test('한글 식별자 뒤에서도 단어 시작을 찾는다', async () => {
+    const { wordStart } = await import('./types.ts');
+    assert.equal(wordStart('int 점수합 = 점수', 12), 10);
+});

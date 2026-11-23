@@ -11,8 +11,8 @@ import {
 const plain = (pattern: string) =>
     pattern
         .replace(/\[#([^#]*)#\]/g, '')
-        .replace(/<#([^#]*)#>/g, '$1')
-        .replace(/\{#([^#]*)#\}/g, '$1')
+        // 기본값 있는 인자는 `{#, <#int b#>{#, <#int c#>#}#}`처럼 중첩되므로 표시만 지웁니다.
+        .replace(/<#|#>|\{#|#\}/g, '')
         .trim();
 
 const resultType = (pattern: string) => /^\[#([^#]*)#\]/.exec(pattern)?.[1]?.trim();
@@ -188,10 +188,13 @@ export const parseClangSignatures = (output: string): IntelSignature[] => {
                 active = [label.length, label.length + text.length];
                 label += text;
                 i = end + 2;
-            } else if (body.startsWith('{#', i) || body.startsWith('[#', i)) {
-                const end = body.indexOf('#', i + 2) + 2;
-                label += body.slice(i + 2, end - 2);
-                i = end;
+            } else if (body.startsWith('{#', i) || body.startsWith('#}', i)) {
+                // 선택 인자 묶음: 안에 <#...#>와 다른 묶음이 중첩될 수 있어 표시만 건너뜁니다.
+                i += 2;
+            } else if (body.startsWith('[#', i)) {
+                const end = body.indexOf('#]', i);
+                label += body.slice(i + 2, end);
+                i = end + 2;
             } else {
                 label += body[i++];
             }

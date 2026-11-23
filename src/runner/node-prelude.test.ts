@@ -106,3 +106,49 @@ rl.on('line', (l) => lines.push(l)).on('close', () => console.log(lines.length, 
 test('없는 모듈은 MODULE_NOT_FOUND', () => {
     assert.throws(() => run(`require('child_process')`), { code: 'MODULE_NOT_FOUND' });
 });
+
+test('Node처럼: 인자 하나의 %%, -0, 숫자를 stdout.write하면 TypeError', () => {
+    assert.equal(
+        run(`console.log('100%%'); console.log('%d %s', -0, -0);`).stdout,
+        '100%%\n-0 -0\n'
+    );
+    assert.throws(() => run(`process.stdout.write(5)`), { code: 'ERR_INVALID_ARG_TYPE' });
+    assert.equal(run(`process.stdout.write(new Uint8Array([65, 10]))`).stdout, 'A\n');
+});
+
+test('readline: output을 주면 질문을 출력하고, 단독 \r도 줄 끝', () => {
+    const { stdout } = run(
+        `const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout });
+rl.question('Name? ', (a) => console.log(a));`,
+        'q\n'
+    );
+    assert.equal(stdout, 'Name? q\n');
+    const lines = run(
+        `const rl = require('readline').createInterface(process.stdin);
+const out = []; rl.on('line', (l) => out.push(l)).on('close', () => console.log(out.join('|')));`,
+        'a\rb\r\nc\n'
+    );
+    assert.equal(lines.stdout, 'a|b|c\n');
+});
+
+test("stdin의 'readable'과 read(), events.once", () => {
+    const { stdout } = run(
+        `let s = ''; process.stdin.on('readable', () => { let c; while ((c = process.stdin.read()) !== null) s += c; });
+process.stdin.on('end', () => console.log(s.trim()));
+console.log(typeof require('events').once);`,
+        '1 2\n'
+    );
+    assert.equal(stdout, 'function\n1 2\n');
+});
+
+test('Buffer: 문자열 검색, write*, 느슨한 deepEqual, inspect depth', () => {
+    const { stdout } = run(
+        `const b = Buffer.from('abc'); const w = Buffer.alloc(4); w.writeInt32LE(-2);
+require('assert').deepEqual({ a: 1 }, { a: '1' });
+console.log(b.includes('b'), b.indexOf('c'), w.readInt32LE(0), require('util').inspect({ a: { b: { c: { d: 1 } } } }, { depth: null }), [[[[{}]]]], [[[[]]]]);`
+    );
+    assert.equal(
+        stdout,
+        'true 2 -2 {\n  a: { b: { c: { d: 1 } } }\n} [ [ [ [Array] ] ] ] [ [ [ [] ] ] ]\n'
+    );
+});

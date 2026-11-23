@@ -188,6 +188,12 @@ export const runWasi = async (
             ...wasiImports.wasi_snapshot_preview1,
             poll_oneoff: (subs: number, events: number, count: number, written: number) =>
                 pollOneoff(memoryOf(), subs, events, count, written),
+            // runno는 표준 입출력(0~2번)을 닫으면 EBADF를 돌려줘서, Python의 open(0).read()가
+            // 끝날 때 "Exception ignored ... Bad file descriptor"를 남깁니다. 실제 OS처럼 성공으로 답합니다.
+            fd_close: (fd: number) =>
+                fd <= 2
+                    ? 0
+                    : (wasiImports.wasi_snapshot_preview1.fd_close as (fd: number) => number)(fd),
         },
         // 일반 실행에서는 불리지 않습니다. (cpp-header.ts의 __webcoder_grow)
         webcoder: { grow() {} },

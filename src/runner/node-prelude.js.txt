@@ -118,7 +118,48 @@
         readDoubleBE(o) { return view(this).getFloat64(o || 0, false); }
         readBigInt64LE(o) { return view(this).getBigInt64(o || 0, true); }
         readBigUInt64LE(o) { return view(this).getBigUint64(o || 0, true); }
+        // Uint8Array와 달리 문자열이나 바이트열도 찾습니다.
+        indexOf(value, byteOffset, encoding) {
+            if (typeof byteOffset === 'string') {
+                encoding = byteOffset;
+                byteOffset = 0;
+            }
+            let start = byteOffset | 0;
+            if (start < 0) start = Math.max(0, this.length + start);
+            if (typeof value === 'number') return Uint8Array.prototype.indexOf.call(this, value & 255, start);
+            const needle = typeof value === 'string' ? Buffer.from(value, encoding) : value;
+            if (needle.length === 0) return Math.min(start, this.length);
+            outer: for (let i = start; i <= this.length - needle.length; i++) {
+                for (let j = 0; j < needle.length; j++) if (this[i + j] !== needle[j]) continue outer;
+                return i;
+            }
+            return -1;
+        }
+        includes(value, byteOffset, encoding) {
+            return this.indexOf(value, byteOffset, encoding) !== -1;
+        }
     }
+    // writeInt32LE 등: 값을 쓰고 다음 오프셋을 돌려줍니다.
+    [
+        ['UInt8', 'setUint8', 1], ['Int8', 'setInt8', 1],
+        ['UInt16LE', 'setUint16', 2, true], ['UInt16BE', 'setUint16', 2, false],
+        ['Int16LE', 'setInt16', 2, true], ['Int16BE', 'setInt16', 2, false],
+        ['UInt32LE', 'setUint32', 4, true], ['UInt32BE', 'setUint32', 4, false],
+        ['Int32LE', 'setInt32', 4, true], ['Int32BE', 'setInt32', 4, false],
+        ['FloatLE', 'setFloat32', 4, true], ['FloatBE', 'setFloat32', 4, false],
+        ['DoubleLE', 'setFloat64', 8, true], ['DoubleBE', 'setFloat64', 8, false],
+        ['BigInt64LE', 'setBigInt64', 8, true], ['BigUInt64LE', 'setBigUint64', 8, true],
+    ].forEach(([name, setter, size, le]) => {
+        Object.defineProperty(Buffer.prototype, 'write' + name, {
+            writable: true,
+            configurable: true,
+            value(v, o) {
+                const at = o || 0;
+                view(this)[setter](at, v, le);
+                return at + size;
+            },
+        });
+    });
 
     let stdinBytes = null;
     const stdinBuffer = () => {
@@ -287,7 +328,10 @@
             prefix = name;
         }
 
-        if (level > MAX_DEPTH) return isArray ? '[Array]' : '[' + (name || 'Object') + ']';
+        // 빈 배열/객체는 Node처럼 깊이와 줄바꿈 판단에 넣지 않고 바로 씁니다.
+        if ((isArray || (!isTyped && !isMap && !isSet)) && Object.keys(value).length === 0)
+            return (prefix ? prefix + ' ' : '') + braces[0] + braces[1];
+        if (level > ctx.depth) return isArray ? '[Array]' : '[' + (name || 'Object') + ']';
         if (level > ctx.deepest) ctx.deepest = level;
         ctx.seen.push(value);
         ctx.indent += 2;
@@ -336,16 +380,18 @@
         return reduceToSingleString(ctx, output, prefix, braces, isArray || isTyped, level, value);
     };
 
-    const inspect = (value, top) => formatValue({ seen: [], indent: 0, deepest: 0 }, value, 0, top);
+    const inspect = (value, top, depth = MAX_DEPTH) =>
+        formatValue({ seen: [], indent: 0, deepest: 0, depth: depth === null ? Infinity : depth }, value, 0, top);
 
     const format = (args) => {
-        if (typeof args[0] === 'string' && /%[sdifoOjc%]/.test(args[0])) {
+        // Node는 인자가 하나뿐이면 형식 문자열을 해석하지 않습니다. (console.log('100%%') → 100%%)
+        if (typeof args[0] === 'string' && args.length > 1 && /%[sdifoOjc%]/.test(args[0])) {
             let i = 1;
             const head = args[0].replace(/%([sdifoOjc%])/g, (m, c) => {
                 if (c === '%') return '%';
                 if (i >= args.length) return m;
                 const a = args[i++];
-                if (c === 'd') return typeof a === 'bigint' ? a + 'n' : typeof a === 'object' && a !== null ? 'NaN' : String(Number(a));
+                if (c === 'd') return typeof a === 'bigint' ? a + 'n' : typeof a === 'object' && a !== null ? 'NaN' : inspect(Number(a), true);
                 if (c === 'i') return typeof a === 'bigint' ? a + 'n' : String(parseInt(a, 10));
                 if (c === 'f') return String(parseFloat(a));
                 if (c === 'j') {
@@ -356,7 +402,7 @@
                     }
                 }
                 if (c === 'c') return '';
-                if (c === 's') return typeof a === 'string' ? a : typeof a === 'bigint' ? a + 'n' : typeof a === 'object' && a !== null ? inspect(a, false) : String(a);
+                if (c === 's') return typeof a === 'string' ? a : typeof a === 'bigint' ? a + 'n' : typeof a === 'number' ? inspect(a, true) : typeof a === 'object' && a !== null ? inspect(a, false) : String(a);
                 return inspect(a, false);
             });
             return [head].concat(args.slice(i).map((a) => inspect(a, true))).join(' ');
@@ -407,6 +453,8 @@
     }
     Object.defineProperty(EventEmitter.prototype, '__listeners', { writable: true, enumerable: false, value: undefined });
     EventEmitter.EventEmitter = EventEmitter;
+    // const { once } = require('events'); await once(rl, 'close');
+    EventEmitter.once = (emitter, event) => new Promise((resolve) => emitter.once(event, (...args) => resolve(args)));
     const makeEmitter = () => {
         const emitter = new EventEmitter();
         Object.defineProperty(emitter, '__listeners', { writable: true, enumerable: false, value: {} });
@@ -425,6 +473,14 @@
     stdin.resume = stdin.pause = stdin.ref = stdin.unref = function () {
         return this;
     };
+    // 'readable' 이벤트 안에서 read()로 읽는 방식: 입력 전체를 한 번 주고 그다음은 null
+    let draining = false;
+    let stdinTaken = false;
+    stdin.read = function () {
+        if (!draining || stdinTaken || stdinText.length === 0) return null;
+        stdinTaken = true;
+        return stdinEncoding ? stdinText : stdinBuffer();
+    };
 
     class ExitSignal {
         constructor(code) {
@@ -437,7 +493,21 @@
         fd,
         isTTY: false,
         write(chunk) {
-            write(fd, typeof chunk === 'string' ? chunk : String(chunk));
+            if (typeof chunk === 'string') write(fd, chunk);
+            else if (chunk instanceof Uint8Array) write(fd, decoder.decode(chunk));
+            else {
+                const received =
+                    chunk === null || chunk === undefined
+                        ? String(chunk)
+                        : typeof chunk === 'object'
+                          ? 'an instance of ' + (className(chunk) || 'Object')
+                          : 'type ' + typeof chunk + ' (' + inspect(chunk, false) + ')';
+                const error = new TypeError(
+                    'The "chunk" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received ' + received
+                );
+                error.code = 'ERR_INVALID_ARG_TYPE';
+                throw error;
+            }
             return true;
         },
         end(chunk) {
@@ -531,8 +601,16 @@
 
     // ── readline ────────────────────────────────────────────────────
     const interfaces = [];
-    const createInterface = () => {
+    const createInterface = (options, outputArg) => {
         const rl = makeEmitter();
+        const isOptions = options && typeof options === 'object' && 'input' in options;
+        const output = isOptions ? options.output : outputArg;
+        let promptText = isOptions && typeof options.prompt === 'string' ? options.prompt : '> ';
+        // output을 주면 Node처럼 질문/프롬프트 문자열이 표준 출력에 나갑니다. (BOJ에서는 오답 원인)
+        const show = (text) => {
+            if (output && typeof output.write === 'function') output.write(String(text));
+        };
+        Object.defineProperty(rl, '__show', { value: show });
         rl.closed = false;
         rl.close = function () {
             if (!this.closed) {
@@ -540,13 +618,24 @@
                 this.emit('close');
             }
         };
-        rl.question = function (_q, cb) {
+        rl.question = function (query, cb) {
+            show(query);
             this.once('line', cb);
         };
-        rl.setPrompt = rl.prompt = rl.pause = rl.resume = function () {
+        rl.setPrompt = function (text) {
+            promptText = String(text);
+        };
+        rl.getPrompt = () => promptText;
+        rl.prompt = function () {
+            show(promptText);
+        };
+        rl.pause = rl.resume = function () {
             return this;
         };
+        let iterator = null;
         rl[Symbol.asyncIterator] = function () {
+            // Node처럼 몇 번을 불러도 같은 줄 큐를 공유합니다.
+            if (iterator) return iterator;
             const queue = [];
             let done = false;
             let waiting = null;
@@ -565,7 +654,10 @@
                     w({ value: undefined, done: true });
                 }
             });
-            return {
+            iterator = {
+                [Symbol.asyncIterator]() {
+                    return this;
+                },
                 next() {
                     if (queue.length) return Promise.resolve({ value: queue.shift(), done: false });
                     if (done) return Promise.resolve({ value: undefined, done: true });
@@ -576,15 +668,17 @@
                     return Promise.resolve({ value: undefined, done: true });
                 },
             };
+            return iterator;
         };
         interfaces.push(rl);
         return rl;
     };
     const readline = { createInterface };
     const readlinePromises = {
-        createInterface() {
-            const rl = createInterface();
-            rl.question = function () {
+        createInterface(options, outputArg) {
+            const rl = createInterface(options, outputArg);
+            rl.question = function (query) {
+                rl.__show(query);
                 return new Promise((resolve) => this.once('line', resolve));
             };
             return rl;
@@ -631,13 +725,17 @@
     };
     path.posix = path;
 
-    const deepEqual = (a, b) => {
+    const isPrimitive = (v) => v === null || typeof v !== 'object';
+    const deepEqual = (a, b, loose) => {
         if (Object.is(a, b)) return true;
-        if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+        if (isPrimitive(a) || isPrimitive(b)) {
+            // assert.deepEqual은 원시값끼리 ==로 비교합니다. (NaN끼리는 같음)
+            return !!loose && isPrimitive(a) && isPrimitive(b) && (a == b || (a !== a && b !== b));
+        }
         if (Array.isArray(a) !== Array.isArray(b)) return false;
         const ka = Object.keys(a);
         const kb = Object.keys(b);
-        return ka.length === kb.length && ka.every((k) => deepEqual(a[k], b[k]));
+        return ka.length === kb.length && ka.every((k) => deepEqual(a[k], b[k], loose));
     };
     class AssertionError extends Error {
         constructor(message) {
@@ -659,7 +757,7 @@
         notEqual: (a, b, m) => a != b || fail(m, inspect(a, false) + ' != ' + inspect(b, false)),
         strictEqual: (a, b, m) => Object.is(a, b) || fail(m, 'Expected values to be strictly equal:\n\n' + inspect(a, false) + ' !== ' + inspect(b, false) + '\n'),
         notStrictEqual: (a, b, m) => !Object.is(a, b) || fail(m, 'Expected values to be strictly unequal'),
-        deepEqual: (a, b, m) => deepEqual(a, b) || fail(m, 'Expected values to be loosely deep-equal'),
+        deepEqual: (a, b, m) => deepEqual(a, b, true) || fail(m, 'Expected values to be loosely deep-equal'),
         deepStrictEqual: (a, b, m) => deepEqual(a, b) || fail(m, 'Expected values to be strictly deep-equal'),
         throws: (fn, m) => {
             try {
@@ -674,9 +772,9 @@
     assert.strict = assert;
 
     const util = {
-        inspect: (v) => inspect(v, false),
+        inspect: (v, options) => inspect(v, false, options && 'depth' in options ? options.depth : MAX_DEPTH),
         format: (...a) => format(a),
-        isDeepStrictEqual: deepEqual,
+        isDeepStrictEqual: (a, b) => deepEqual(a, b),
         promisify:
             (fn) =>
             (...args) =>
@@ -747,10 +845,16 @@
 
     // 메인 스크립트가 끝난 뒤 호스트가 호출: 입력 이벤트를 흘려보냅니다.
     g.__drainInput = () => {
-        if (stdin.listenerCount('data') > 0) stdin.emit('data', stdinEncoding ? stdinText : stdinBuffer());
+        draining = true;
+        if (stdin.listenerCount('data') > 0 && stdinText.length > 0) {
+            stdinTaken = true;
+            stdin.emit('data', stdinEncoding ? stdinText : stdinBuffer());
+        }
+        if (stdin.listenerCount('readable') > 0) stdin.emit('readable');
         stdin.emit('end');
         stdin.emit('close');
-        const lines = stdinText.length ? stdinText.replace(/\r/g, '').split('\n') : [];
+        // readline은 \n, \r\n, 단독 \r을 모두 줄 끝으로 봅니다.
+        const lines = stdinText.length ? stdinText.split(/\r\n|\r|\n/) : [];
         if (lines.length && lines[lines.length - 1] === '') lines.pop();
         interfaces.forEach((rl) => {
             for (const line of lines) {

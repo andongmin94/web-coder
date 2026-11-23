@@ -102,3 +102,11 @@ test('멤버 완성: 자기 클래스 이름은 빼고 상속 멤버는 남긴�
         ['x:field', 'base_value:field']
     );
 });
+
+test('기본값 인자({#...#})가 현재 인자여도 시그니처가 깨지지 않는다', () => {
+    const [sig] = parseClangSignatures(
+        'OVERLOAD: [#basic_string#]substr(size_type __pos{#, <#size_type __n#>#})[# const#]\n'
+    );
+    assert.equal(sig.label, 'substr(size_type __pos, size_type __n) const → basic_string');
+    assert.equal(sig.label.slice(...sig.active!), 'size_type __n');
+});

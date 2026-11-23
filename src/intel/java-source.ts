@@ -146,7 +146,7 @@ export const parseUserClasses = (source: string): UserClass[] => {
         if (cls.c.length === 0) cls.c.push({ n: name, p: [], t: name });
 
         const fieldRe = new RegExp(
-            String.raw`(?:^|;)\s*${ANNOTATIONS}(${MODIFIERS})(${TYPE})\s+([A-Za-z_]\w*(?:\s*\[\s*\])*(?:\s*=[^;]*)?(?:\s*,\s*[A-Za-z_]\w*(?:\s*\[\s*\])*(?:\s*=[^;]*?)?)*)\s*(?=;)`,
+            String.raw`(?:^|;)\s*${ANNOTATIONS}(${MODIFIERS})(${TYPE})\s+([A-Za-z_]\w*(?:\s*\[\s*\])*(?:\s*[=,][^;]*)?)\s*(?=;)`,
             'g'
         );
         for (const m of flat.matchAll(fieldRe)) {

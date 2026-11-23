@@ -9,6 +9,7 @@
 #    - System.in: TeaVM 원본은 항상 EOF → webcoderStdin import로 입력을 읽도록 교체
 #    - java.util.Scanner / InputMismatchException 추가 (TeaVM에 없음)
 #    - Thread(ThreadGroup, Runnable, String, long) 생성자 추가 (patch-thread.mjs)
+#    - String.format/printf의 실수 형식(%f, %e, %g)을 OpenJDK와 같게 (TFormatter)
 # 3) public/java/에 복사
 set -euo pipefail
 
@@ -62,6 +63,7 @@ gen InputMismatchException java.util Scanner InputMismatchException "$GEN/sdk/ja
 # TeaVM 런타임용: java.* 참조는 TeaVM이 T* 클래스로 바꿔 연결합니다. (원본과 같은 Java 17 바이트코드)
 "$(exe javac)" --release 17 -nowarn -cp "$(winpath "$CL")$SEP$(winpath "$IO")" -d "$(winpath "$OUT/rt")" \
     "$(winpath "$HERE/patch/org/teavm/classlib/java/lang/TConsoleInputStream.java")" \
+    "$(winpath "$HERE/patch/org/teavm/classlib/java/util/TFormatter.java")" \
     "$(winpath "$GEN/rt/org/teavm/classlib/java/util/TScanner.java")" \
     "$(winpath "$GEN/rt/org/teavm/classlib/java/util/TInputMismatchException.java")"
 
@@ -72,6 +74,8 @@ gen InputMismatchException java.util Scanner InputMismatchException "$GEN/sdk/ja
 
 node "$HERE/classlib-archive.mjs" put "$DIST/runtime-classlib-teavm.bin" "$ROOT/public/java/runtime-classlib.bin" \
     "org/teavm/classlib/java/lang/TConsoleInputStream.class=$OUT/rt/org/teavm/classlib/java/lang/TConsoleInputStream.class" \
+    "org/teavm/classlib/java/util/TFormatter.class=$OUT/rt/org/teavm/classlib/java/util/TFormatter.class" \
+    "org/teavm/classlib/java/util/TFormatter\$FormatWriter.class=$OUT/rt/org/teavm/classlib/java/util/TFormatter\$FormatWriter.class" \
     "org/teavm/classlib/java/util/TScanner.class=$OUT/rt/org/teavm/classlib/java/util/TScanner.class" \
     "org/teavm/classlib/java/util/TInputMismatchException.class=$OUT/rt/org/teavm/classlib/java/util/TInputMismatchException.class"
 node "$HERE/classlib-archive.mjs" put "$DIST/compile-classlib-teavm.bin" "$ROOT/public/java/compile-classlib.bin" \

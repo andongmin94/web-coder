@@ -22,11 +22,31 @@ declare class Buffer extends Uint8Array {
     readUInt8(offset?: number): number;
     readInt8(offset?: number): number;
     readUInt16LE(offset?: number): number;
+    readUInt16BE(offset?: number): number;
     readInt16LE(offset?: number): number;
+    readInt16BE(offset?: number): number;
     readUInt32LE(offset?: number): number;
+    readUInt32BE(offset?: number): number;
     readInt32LE(offset?: number): number;
+    readInt32BE(offset?: number): number;
     readDoubleLE(offset?: number): number;
+    readDoubleBE(offset?: number): number;
     readBigInt64LE(offset?: number): bigint;
+    readBigUInt64LE(offset?: number): bigint;
+    writeUInt8(value: number, offset?: number): number;
+    writeInt8(value: number, offset?: number): number;
+    writeUInt16LE(value: number, offset?: number): number;
+    writeUInt16BE(value: number, offset?: number): number;
+    writeInt16LE(value: number, offset?: number): number;
+    writeInt16BE(value: number, offset?: number): number;
+    writeUInt32LE(value: number, offset?: number): number;
+    writeUInt32BE(value: number, offset?: number): number;
+    writeInt32LE(value: number, offset?: number): number;
+    writeInt32BE(value: number, offset?: number): number;
+    writeDoubleLE(value: number, offset?: number): number;
+    writeDoubleBE(value: number, offset?: number): number;
+    indexOf(value: number | string | Uint8Array, byteOffset?: number): number;
+    includes(value: number | string | Uint8Array, byteOffset?: number): boolean;
 }
 declare module 'fs' {
     /** 표준 입력은 '/dev/stdin' 또는 0. 인코딩을 주지 않으면 Buffer */
@@ -46,9 +66,12 @@ declare module 'readline' {
         once(event: 'close', listener: () => void): this;
         close(): void;
         question(query: string, callback: (answer: string) => void): void;
+        setPrompt(prompt: string): void;
+        prompt(): void;
         [Symbol.asyncIterator](): AsyncIterableIterator<string>;
     }
-    export function createInterface(options: { input: unknown; output?: unknown; terminal?: boolean }): Interface;
+    export function createInterface(options: { input: unknown; output?: unknown; terminal?: boolean; prompt?: string }): Interface;
+    export function createInterface(input: unknown, output?: unknown): Interface;
 }
 declare module 'node:readline' { export * from 'readline'; }
 declare module 'readline/promises' {
@@ -59,7 +82,8 @@ declare module 'readline/promises' {
         question(query: string): Promise<string>;
         [Symbol.asyncIterator](): AsyncIterableIterator<string>;
     }
-    export function createInterface(options: { input: unknown; output?: unknown; terminal?: boolean }): Interface;
+    export function createInterface(options: { input: unknown; output?: unknown; terminal?: boolean; prompt?: string }): Interface;
+    export function createInterface(input: unknown, output?: unknown): Interface;
 }
 declare module 'path' {
     export const sep: string;
@@ -99,12 +123,15 @@ declare module 'events' {
         emit(event: string, ...args: any[]): boolean;
         listenerCount(event: string): number;
     }
-    namespace EventEmitter { export { EventEmitter }; }
+    namespace EventEmitter {
+        export { EventEmitter };
+        export function once(emitter: { once(event: string, listener: (...args: any[]) => void): unknown }, event: string): Promise<any[]>;
+    }
     export = EventEmitter;
 }
 declare module 'node:events' { import E = require('events'); export = E; }
 declare module 'util' {
-    export function inspect(value: unknown): string;
+    export function inspect(value: unknown, options?: { depth?: number | null; [key: string]: unknown }): string;
     export function format(format?: unknown, ...args: unknown[]): string;
     export function isDeepStrictEqual(a: unknown, b: unknown): boolean;
     export function promisify(fn: (...args: any[]) => void): (...args: any[]) => Promise<any>;
@@ -116,14 +143,17 @@ declare module 'buffer' { const B: typeof Buffer; export { B as Buffer }; }
 declare module 'timers' { export { setTimeout, clearTimeout, setInterval, clearInterval, setImmediate }; }
 declare const process: {
     stdin: {
-        on(event: 'data', l: (chunk: Buffer | string) => void): void;
-        on(event: 'end' | 'close', l: () => void): void;
-        setEncoding(enc: string): void;
-        resume(): void;
+        on(event: 'data', l: (chunk: Buffer | string) => void): typeof process.stdin;
+        on(event: 'end' | 'close' | 'readable', l: () => void): typeof process.stdin;
+        once(event: 'data', l: (chunk: Buffer | string) => void): typeof process.stdin;
+        once(event: 'end' | 'close' | 'readable', l: () => void): typeof process.stdin;
+        read(): Buffer | string | null;
+        setEncoding(enc: string): typeof process.stdin;
+        resume(): typeof process.stdin;
         fd: 0;
     };
-    stdout: { write(text: string): boolean };
-    stderr: { write(text: string): boolean };
+    stdout: { write(text: string | Uint8Array): boolean };
+    stderr: { write(text: string | Uint8Array): boolean };
     argv: string[];
     env: Record<string, string | undefined>;
     platform: string;
