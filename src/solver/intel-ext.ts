@@ -143,6 +143,9 @@ const signaturePlugin = (getIntel: () => LanguageIntel | null) =>
     ViewPlugin.fromClass(
         class {
             private seq = 0;
+            destroy() {
+                this.seq++;
+            }
             update(update: ViewUpdate) {
                 const intel = getIntel();
                 if (!intel?.signature || !update.docChanged) return;
@@ -162,8 +165,10 @@ const signaturePlugin = (getIntel: () => LanguageIntel | null) =>
                 const open = callOpenParen(code, pos);
                 if (open < 0) return;
                 const seq = ++this.seq;
+                const doc = view.state.doc;
                 void intel.signature(code, pos).then((sigs) => {
-                    if (seq !== this.seq) return;
+                    // 기다리는 사이 코드가 바뀌었거나(언어 전환으로 문서 교체 포함) 더 새 요청이 있으면 버립니다.
+                    if (seq !== this.seq || view.state.doc !== doc) return;
                     view.dispatch({
                         effects: setSignature.of(
                             sigs && sigs.length ? { pos: open + 1, sigs } : null
@@ -209,9 +214,11 @@ export const intelExtensions = (getIntel: () => LanguageIntel | null): Extension
         async (view): Promise<Diagnostic[]> => {
             const intel = getIntel();
             if (!intel?.diagnose) return [];
-            const code = view.state.doc.toString();
-            const list = await intel.diagnose(code);
-            const len = view.state.doc.length;
+            const doc = view.state.doc;
+            const list = await intel.diagnose(doc.toString());
+            // 기다리는 사이 코드가 바뀌었으면(언어 전환 포함) 옛 위치의 진단은 버립니다. 바뀐 코드로 다시 돕니다.
+            if (view.state.doc !== doc) return [];
+            const len = doc.length;
             return list
                 .filter((d) => d.from <= len)
                 .map((d) => ({
@@ -227,8 +234,10 @@ export const intelExtensions = (getIntel: () => LanguageIntel | null): Extension
     hoverTooltip(async (view, pos): Promise<Tooltip | null> => {
         const intel = getIntel();
         if (!intel?.hover) return null;
-        const text = await intel.hover(view.state.doc.toString(), pos);
-        if (!text) return null;
+        const doc = view.state.doc;
+        const text = await intel.hover(doc.toString(), pos);
+        // 기다리는 사이 문서가 바뀌면 pos가 새 문서 밖일 수 있습니다.
+        if (!text || view.state.doc !== doc) return null;
         return {
             pos,
             above: true,

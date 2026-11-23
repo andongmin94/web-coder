@@ -8,6 +8,7 @@ import {
 } from '../judge/judge.ts';
 import type { RunResult } from '../runner/types.ts';
 import { h } from './dom.ts';
+import { linkifyLocations } from './locations.ts';
 
 export type TestCase = {
     id: string;
@@ -71,6 +72,10 @@ type Callbacks = {
     onToggle: (id: string) => void;
     onChangeCustom: (id: string, patch: { input?: string; expected?: string }) => void;
     onDeleteCustom: (id: string) => void;
+    /** 에러의 소스 위치(줄, 열)로 에디터 이동 */
+    onJumpToSource: (line: number, column: number | null) => void;
+    /** 이 테스트 하나만 실행 */
+    onRunOne: (test: TestCase) => void;
     /** 예제를 고칠 수 있는 내 테스트로 복사 */
     onDuplicate: (test: TestCase) => void;
 };
@@ -89,10 +94,10 @@ const MB = 1024 * 1024;
 const formatMemory = (bytes: number) =>
     bytes >= 100 * MB ? `${Math.round(bytes / MB)}MB` : `${(bytes / MB).toFixed(1)}MB`;
 
-const plainBlock = (label: string | Node[], text: string) =>
+const plainBlock = (label: string | Node[], text: string | (Node | string)[]) =>
     h('div', { class: 'io' }, [
         h('div', { class: 'io-label' }, [h('span', { class: 'io-title' }, label)]),
-        h('pre', {}, text.length ? text.replace(/\n$/, '') : ' '),
+        h('pre', {}, typeof text !== 'string' ? text : text.length ? text.replace(/\n$/, '') : ' '),
     ]);
 
 /** 실제 출력에서 기대 출력과 다른 줄을 빨간 글씨로, 그 안에서 다른 글자는 밑줄로 보여 줍니다. */
@@ -258,20 +263,6 @@ export const renderTest = (
     } else {
         body.append(plainBlock('입력', test.input));
     }
-    const duplicateButton =
-        test.kind === 'sample'
-            ? h(
-                  'button',
-                  {
-                      class: 'btn btn-ghost btn-sm',
-                      type: 'button',
-                      title: '이 예제의 입력과 기대 출력을 고칠 수 있는 내 테스트로 복사합니다',
-                      onclick: () => callbacks.onDuplicate(test),
-                  },
-                  '테스트 복제'
-              )
-            : null;
-
     if (state.phase === 'done') {
         const { stdout, stderr } = state.result.output;
         if (verdict === 'fail') {
@@ -283,7 +274,13 @@ export const renderTest = (
                 plainBlock(verdict === 'timeout' ? '실제 출력 (중단 전까지)' : '실제 출력', stdout)
             );
         }
-        if (stderr.trim()) body.append(plainBlock('표준 에러', stderr));
+        if (stderr.trim())
+            body.append(
+                plainBlock(
+                    '표준 에러',
+                    linkifyLocations(stderr.replace(/\n$/, ''), callbacks.onJumpToSource)
+                )
+            );
         if (verdict === 'error' && state.result.message)
             body.append(h('p', { class: 'io-note' }, state.result.message));
         if (verdict === 'error' && !stderr.trim() && !state.result.message) {
@@ -334,22 +331,26 @@ export const renderTest = (
         body.append(plainBlock('기대 출력', test.expected));
     }
 
-    if (test.kind === 'custom') {
-        body.append(
-            h('div', {}, [
-                h(
-                    'button',
-                    {
-                        class: 'btn btn-ghost btn-sm test-remove',
-                        type: 'button',
-                        onclick: () => callbacks.onDeleteCustom(test.id),
-                    },
-                    '이 테스트 삭제'
-                ),
-            ])
-        );
-    }
-    if (duplicateButton) body.append(h('div', {}, [duplicateButton]));
+    // 카드 아래 동작: 이것만 실행 · 복제(예제) / 삭제(내 테스트)
+    const link = (text: string, onclick: () => void, extra = '', title?: string) =>
+        h('button', { class: `link-button ${extra}`, type: 'button', title, onclick }, text);
+    body.append(
+        h('div', { class: 'test-actions' }, [
+            link('이 테스트만 실행', () => callbacks.onRunOne(test)),
+            test.kind === 'sample'
+                ? link(
+                      '테스트 복제',
+                      () => callbacks.onDuplicate(test),
+                      '',
+                      '이 예제의 입력과 기대 출력을 고칠 수 있는 내 테스트로 복사합니다'
+                  )
+                : link(
+                      '이 테스트 삭제',
+                      () => callbacks.onDeleteCustom(test.id),
+                      'link-button-danger'
+                  ),
+        ])
+    );
     card.append(body);
     return card;
 };

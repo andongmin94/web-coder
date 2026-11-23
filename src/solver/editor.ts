@@ -169,4 +169,20 @@ export class CodeEditor {
     focus() {
         this.view.focus();
     }
+
+    /** 줄(1부터)과 열(1부터, 없으면 줄 처음 글자)로 커서를 옮기고 화면 가운데로 보여 줍니다. */
+    goTo(line: number, column: number | null) {
+        const doc = this.view.state.doc;
+        const target = doc.line(Math.min(Math.max(1, line), doc.lines));
+        const offset =
+            column === null
+                ? target.text.length - target.text.trimStart().length
+                : Math.min(column - 1, target.length);
+        const pos = target.from + Math.max(0, offset);
+        this.view.dispatch({
+            selection: { anchor: pos },
+            effects: EditorView.scrollIntoView(pos, { y: 'center' }),
+        });
+        this.view.focus();
+    }
 }

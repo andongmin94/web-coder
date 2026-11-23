@@ -20,6 +20,7 @@ import {
 import { RunnerPool } from '../runner/pool.ts';
 import { CodeEditor } from './editor.ts';
 import { setupEditorSettings } from './editor-settings.ts';
+import { linkifyLocations } from './locations.ts';
 import { limitChips, renderProblem, renderProblemMissing } from './problem-view.ts';
 import {
     isBadVerdict,
@@ -200,7 +201,12 @@ const setOpen = (id: string, open: boolean) => {
     else openTests.delete(id);
 };
 
+/** 에러의 소스 위치를 누르면 에디터의 그 줄로 갑니다. */
+const jumpToSource = (line: number, column: number | null) => editor.goTo(line, column);
+
 const callbacks = {
+    onJumpToSource: jumpToSource,
+    onRunOne: (test: TestCase) => void runTests(test.id),
     onToggle: (id: string) => {
         setOpen(id, !isOpen(id));
         const test = allTests().find((t) => t.id === id);
@@ -284,6 +290,10 @@ const renderStatus = () => {
         } else {
             parts.push(h('span', {}, `실행 중 ${stage.done ?? 0}/${stage.total ?? 0}`));
         }
+        // 1초가 넘으면 경과 시간을 보여 줍니다. (시간 초과가 날 코드도 멈춘 게 아님을 알 수 있게)
+        const elapsed = performance.now() - stageStarted;
+        if (elapsed >= 1000)
+            parts.push(h('span', { class: 'status-sub' }, `${(elapsed / 1000).toFixed(1)}초`));
     } else if (compileMessage?.kind === 'error') {
         parts.push(h('span', { class: 'status-fail' }, '✕ 컴파일 에러'));
         const timing = timingText();
@@ -291,7 +301,17 @@ const renderStatus = () => {
     } else {
         const verdicts = doneVerdicts();
         if (verdicts.length === 0) {
-            parts.push(h('span', { class: 'status-hint' }, 'Ctrl+Enter로 예제를 실행합니다'));
+            // 실행 단축키는 에디터 아래 막대에 있으므로 여기서는 무엇을 돌릴지만 알려 줍니다.
+            const samples = problem?.samples.length ?? 0;
+            parts.push(
+                h(
+                    'span',
+                    { class: 'status-hint' },
+                    customTests.length
+                        ? `예제 ${samples}개 · 내 테스트 ${customTests.length}개`
+                        : `예제 ${samples}개`
+                )
+            );
         } else if (verdicts.every((v) => v === 'cancelled')) {
             parts.push(h('span', { class: 'status-hint' }, '중단했습니다'));
         } else {
@@ -317,7 +337,7 @@ const renderStatus = () => {
         compileBox.className = `compile-box compile-${compileMessage.kind}`;
         compileBox.replaceChildren(
             h('h3', {}, compileMessage.kind === 'error' ? '컴파일 에러' : '컴파일 경고'),
-            h('pre', {}, compileMessage.text)
+            h('pre', {}, linkifyLocations(compileMessage.text, jumpToSource))
         );
     }
 };
@@ -332,7 +352,17 @@ const judgeLimitMs = () =>
         ? judgeTimeLimitMs(current.runtime, problem.timeLimitSec)
         : null;
 
+/** 실행(불러오기·컴파일 포함)을 시작한 시각과, 경과 시간을 다시 그리는 타이머 */
+let stageStarted = 0;
+let stageTicker = 0;
+
 const setStage = (next: Stage | null) => {
+    if (next && !stage) {
+        stageStarted = performance.now();
+        stageTicker = window.setInterval(renderStatus, 200);
+    } else if (!next) {
+        clearInterval(stageTicker);
+    }
     stage = next;
     const busy = next !== null;
     runButton.hidden = busy;
@@ -341,10 +371,12 @@ const setStage = (next: Stage | null) => {
     renderStatus();
 };
 
-const runTests = async () => {
+/** 테스트를 실행합니다. only를 주면 그 테스트만 (다른 테스트의 결과는 그대로 둠) */
+const runTests = async (only?: string) => {
     if (stage || !current) return;
     const lang = current;
-    const tests = allTests();
+    const all = allTests();
+    const tests = only ? all.filter((t) => t.id === only) : all;
     if (!tests.length) {
         showToast('실행할 예제가 없습니다. "+ 테스트"로 입력을 추가해 보세요.');
         return;
@@ -386,9 +418,8 @@ const runTests = async () => {
         if (!compiled.ok) {
             warmed.add(lang.runtime);
             compileMessage = { kind: 'error', text: compiled.diagnostics };
-            for (const t of tests) {
-                testStates.set(t.id, { phase: 'skipped' });
-            }
+            // 컴파일이 안 되면 어떤 테스트도 돌 수 없습니다.
+            for (const t of all) testStates.set(t.id, { phase: 'skipped' });
             lastRun = { source, languageId: lang.id, verdicts: [], compileError: true };
             return;
         }
@@ -427,7 +458,14 @@ const runTests = async () => {
         );
         // 예제는 병렬로 돌므로 모든 예제가 끝날 때까지의 시간 (런타임을 처음 불러오는 시간 포함)
         lastTiming.runMs = performance.now() - runStarted;
-        lastRun = { source, languageId: lang.id, verdicts: doneVerdicts(), compileError: false };
+        // 하나만 돌린 결과로는 "예제를 모두 통과했는지" 알 수 없으므로 제출 전 확인 기준은 바꾸지 않습니다.
+        if (!only)
+            lastRun = {
+                source,
+                languageId: lang.id,
+                verdicts: doneVerdicts(),
+                compileError: false,
+            };
     } catch (error) {
         showToast(error instanceof Error ? error.message : String(error), 'error');
     } finally {
@@ -725,6 +763,12 @@ document.addEventListener('keydown', (e) => {
         settingsPanel.hidden = true;
         closeConfirm();
     }
+    // Ctrl+B: 문제 패널 접기/펼치기 (에디터 안에서도)
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        toggleProblem();
+        return;
+    }
     // 에디터 밖에 포커스가 있어도 단축키가 동작하게 합니다. (에디터 안에서는 에디터가 처리)
     if (
         e.key === 'Enter' &&
@@ -752,14 +796,15 @@ const toggleProblemButton = $<HTMLButtonElement>('#toggle-problem');
 const setProblemCollapsed = (collapsed: boolean) => {
     document.documentElement.classList.toggle('problem-collapsed', collapsed);
     toggleProblemButton.setAttribute('aria-pressed', String(collapsed));
-    toggleProblemButton.title = collapsed ? '문제 펼치기' : '문제 접기';
+    toggleProblemButton.title = collapsed ? '문제 펼치기 (Ctrl+B)' : '문제 접기 (Ctrl+B)';
     editor.refresh();
 };
-toggleProblemButton.addEventListener('click', () => {
+function toggleProblem() {
     const collapsed = !document.documentElement.classList.contains('problem-collapsed');
     setProblemCollapsed(collapsed);
     void storage.updatePrefs({ problemCollapsed: collapsed });
-});
+}
+toggleProblemButton.addEventListener('click', toggleProblem);
 
 void storage.getPrefs().then((prefs) => {
     setupSplit(prefs);

@@ -812,6 +812,11 @@ textarea {
     padding-bottom: 7px;
 }
 
+.test-row > .chevron {
+    padding-bottom: 0;
+    margin-bottom: 4px;
+}
+
 .test-verdict {
     font-size: 13px;
     font-weight: 700;
@@ -866,9 +871,21 @@ textarea {
     font-weight: 600;
 }
 
+/* 접기/펼치기 화살표: 제목 줄 오른쪽 끝, 눌러서 접을 수 있다는 게 보이게 */
 .chevron {
-    color: var(--fg-faint);
+    display: inline-grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: var(--radius-sm);
+    color: var(--fg-muted);
+    font: 600 18px/1 var(--ui);
     transition: transform 0.15s;
+}
+
+.test-row:hover .chevron {
+    background: var(--bg-hover);
+    color: var(--boj-accent);
 }
 
 .test.open .chevron {
@@ -931,6 +948,11 @@ textarea {
     background: var(--fail);
 }
 
+.io-edit::placeholder {
+    color: var(--fg-faint);
+    font: 13px var(--boj-font);
+}
+
 .io-edit {
     width: 100%;
     min-height: 64px;
@@ -952,8 +974,47 @@ textarea {
     color: var(--warn);
 }
 
-.test-remove {
-    margin-left: 4px;
+/* 에러 안의 소스 위치 (누르면 에디터의 그 줄로) */
+.source-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--boj-accent);
+    font: inherit;
+    text-decoration: underline dotted;
+    text-underline-offset: 3px;
+    cursor: pointer;
+}
+
+.source-link:hover {
+    text-decoration-style: solid;
+}
+
+/* 백준 "복사"처럼 파란 글씨 버튼: + 테스트, 테스트 복제, 이 테스트 삭제 */
+.link-button {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--boj-accent);
+    font: 13px var(--boj-font);
+    cursor: pointer;
+}
+
+.link-button:hover {
+    text-decoration: underline;
+}
+
+.test-actions {
+    display: flex;
+    gap: 16px;
+}
+
+.link-button-danger {
+    color: var(--fg-muted);
+}
+
+.link-button-danger:hover {
+    color: var(--boj-wa);
 }
 
 .empty {

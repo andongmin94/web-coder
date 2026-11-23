@@ -53,6 +53,7 @@ npm run package
 2. `2-diff.png`: 틀린 출력 비교
 3. `3-intellisense.png`: C++ 자동 완성
 4. `4-diagnostics.png`: Python 오류 표시
+5. `5-dark.png`: 어둡게 모드
 
 ## 개인정보 보호 탭
 
