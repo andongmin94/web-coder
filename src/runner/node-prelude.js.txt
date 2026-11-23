@@ -174,16 +174,47 @@
     const BREAK_LENGTH = 80;
     const MAX_ARRAY = 100;
     const MAX_DEPTH = 2;
-    const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+    // Node는 $가 들어간 키도 따옴표로 감쌉니다. ({ '$y': 1 })
+    const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
+    // Node의 strEscape: 제어 문자는 \x1B처럼, 짝 없는 서로게이트는 \ud800처럼 씁니다.
+    const ESCAPES = { 8: '\\b', 9: '\\t', 10: '\\n', 12: '\\f', 13: '\\r', 92: '\\\\' };
+    const ESCAPE_RE = /[\x00-\x1f\x5c\x7f-\x9f]|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g;
     const quote = (text) => {
         let q = "'";
         if (text.includes("'")) {
             if (!text.includes('"')) q = '"';
             else if (!text.includes('`') && !text.includes('${')) q = '`';
         }
-        const body = text.replace(/[\\\n\r\t\b\f\v]/g, (c) => ({ '\\': '\\\\', '\n': '\\n', '\r': '\\r', '\t': '\\t', '\b': '\\b', '\f': '\\f', '\v': '\\v' })[c]);
+        const body = text.replace(ESCAPE_RE, (c) => {
+            const code = c.charCodeAt(0);
+            if (code >= 0xd800) return '\\u' + code.toString(16);
+            return ESCAPES[code] || '\\x' + code.toString(16).toUpperCase().padStart(2, '0');
+        });
         return q + (q === "'" ? body.replace(/'/g, "\\'") : body) + q;
+    };
+
+    // Node의 getStringWidth: 한글·한자·이모지 등은 2칸, 결합 문자와 제어 문자는 0칸
+    const isFullWidth = (c) =>
+        c >= 0x1100 &&
+        (c <= 0x115f || c === 0x2329 || c === 0x232a || (c >= 0x2e80 && c <= 0x3247 && c !== 0x303f) ||
+            (c >= 0x3250 && c <= 0x4dbf) || (c >= 0x4e00 && c <= 0xa4c6) || (c >= 0xa960 && c <= 0xa97c) ||
+            (c >= 0xac00 && c <= 0xd7a3) || (c >= 0xf900 && c <= 0xfaff) || (c >= 0xfe10 && c <= 0xfe19) ||
+            (c >= 0xfe30 && c <= 0xfe6b) || (c >= 0xff01 && c <= 0xff60) || (c >= 0xffe0 && c <= 0xffe6) ||
+            (c >= 0x1b000 && c <= 0x1b001) || (c >= 0x1f200 && c <= 0x1f251) || (c >= 0x1f300 && c <= 0x1f64f) ||
+            (c >= 0x20000 && c <= 0x3fffd));
+    const isZeroWidth = (c) =>
+        c <= 0x1f || (c >= 0x7f && c <= 0x9f) || (c >= 0x300 && c <= 0x36f) || (c >= 0x200b && c <= 0x200f) ||
+        (c >= 0x20d0 && c <= 0x20ff) || (c >= 0xfe00 && c <= 0xfe0f) || (c >= 0xfe20 && c <= 0xfe2f) ||
+        (c >= 0xe0100 && c <= 0xe01ef);
+    const stringWidth = (text) => {
+        if (/^[\x20-\x7e]*$/.test(text)) return text.length;
+        let width = 0;
+        for (const ch of text.normalize('NFC')) {
+            const c = ch.codePointAt(0);
+            width += isFullWidth(c) ? 2 : isZeroWidth(c) ? 0 : 1;
+        }
+        return width;
     };
 
     const className = (value) => {
@@ -213,7 +244,7 @@
         if (value.length > MAX_ARRAY) outputLength--;
         const dataLen = new Array(outputLength);
         for (let i = 0; i < outputLength; i++) {
-            const len = output[i].length;
+            const len = stringWidth(output[i]);
             dataLen[i] = len;
             totalLength += len + 2;
             if (maxLength < len) maxLength = len;
@@ -248,10 +279,12 @@
                 let str = '';
                 let j = i;
                 for (; j < max - 1; j++) {
+                    // 화면 폭(dataLen)으로 맞추므로 글자 수와의 차이만큼 더 채웁니다.
                     const cell = output[j] + ', ';
-                    str += padStart ? cell.padStart(maxLineLength[j - i], ' ') : cell.padEnd(maxLineLength[j - i], ' ');
+                    const padding = maxLineLength[j - i] + output[j].length - dataLen[j];
+                    str += padStart ? cell.padStart(padding, ' ') : cell.padEnd(padding, ' ');
                 }
-                str += padStart ? output[j].padStart(maxLineLength[j - i] - 2, ' ') : output[j];
+                str += padStart ? output[j].padStart(maxLineLength[j - i] + output[j].length - dataLen[j] - 2, ' ') : output[j];
                 tmp.push(str);
             }
             if (value.length > MAX_ARRAY) tmp.push(output[outputLength]);
@@ -286,15 +319,32 @@
         if (typeof value === 'bigint') return value + 'n';
         if (typeof value === 'symbol') return value.toString();
         if (value === null || typeof value !== 'object' && typeof value !== 'function') return String(value);
-        if (ctx.seen.includes(value)) return '[Circular *1]';
+        if (ctx.seen.includes(value)) {
+            // 순환 참조: 대상에는 <ref *N>, 참조 자리에는 [Circular *N]
+            if (!ctx.circular.has(value)) ctx.circular.set(value, ctx.circular.size + 1);
+            return '[Circular *' + ctx.circular.get(value) + ']';
+        }
 
+        // 함수와 원시값 객체(new Number(3) 등)는 이름표를 붙이고, 속성이 있으면 { ... }로 이어 씁니다.
+        let tag = null;
         if (typeof value === 'function') {
             const source = Function.prototype.toString.call(value);
             if (/^class\b/.test(source)) {
                 const parent = Object.getPrototypeOf(value);
-                return '[class ' + (value.name || '(anonymous)') + (parent && parent.name ? ' extends ' + parent.name : '') + ']';
+                tag = '[class ' + (value.name || '(anonymous)') + (parent && parent.name ? ' extends ' + parent.name : '') + ']';
+            } else {
+                // AsyncFunction, GeneratorFunction, AsyncGeneratorFunction
+                const kind = className(value) || 'Function';
+                tag = '[' + kind + (value.name ? ': ' + value.name : ' (anonymous)') + ']';
             }
-            return value.name ? '[Function: ' + value.name + ']' : '[Function (anonymous)]';
+        } else if (value instanceof Number || value instanceof String || value instanceof Boolean || value instanceof BigInt || value instanceof Symbol) {
+            const type = value instanceof Number ? 'Number' : value instanceof String ? 'String' : value instanceof Boolean ? 'Boolean' : value instanceof BigInt ? 'BigInt' : 'Symbol';
+            tag = '[' + type + ': ' + formatValue(ctx, value.valueOf(), level, false) + ']';
+        }
+        if (tag !== null) {
+            const keys = ownKeys(ctx, value).filter((k) => !(value instanceof String && ((typeof k === 'string' && /^(0|[1-9]\d*)$/.test(k)) || k.hidden === 'length')));
+            if (keys.length === 0 || level > ctx.depth) return tag;
+            return formatObject(ctx, value, level, tag, ['{', '}'], keys, false, false);
         }
         if (value instanceof Error) return formatError(value);
         if (value instanceof RegExp) return String(value);
@@ -319,19 +369,45 @@
             if (name !== 'Array') prefix = (name || '[Array: null prototype]') + '(' + value.length + ')';
         } else if (isTyped) {
             braces = ['[', ']'];
-            prefix = name + '(' + value.length + ')';
+            // 상속한 클래스는 원래 형식을 덧붙입니다: Foo(2) [Uint8Array] [ ... ]
+            const builtin = Object.prototype.toString.call(value).slice(8, -1);
+            prefix = name + '(' + value.length + ')' + (name !== builtin ? ' [' + builtin + ']' : '');
         } else if (isMap || isSet) {
-            prefix = name + '(' + value.size + ')';
+            const builtin = isMap ? 'Map' : 'Set';
+            prefix = name + '(' + value.size + ')' + (name !== builtin ? ' [' + builtin + ']' : '');
+        } else if (value instanceof ArrayBuffer) {
+            if (level > ctx.depth) return '[ArrayBuffer]';
+            const bytes = new Uint8Array(value);
+            const shown = Array.prototype.slice.call(bytes, 0, 50).map((v) => (v < 16 ? '0' : '') + v.toString(16));
+            const contents = '<' + shown.join(' ') + (bytes.length > 50 ? ' ... ' + (bytes.length - 50) + ' more bytes' : '') + '>';
+            return reduceToSingleString(ctx, ['[Uint8Contents]: ' + contents, '[byteLength]: ' + value.byteLength], 'ArrayBuffer', ['{', '}'], false, level, value);
         } else if (proto === null) {
             prefix = '[Object: null prototype]';
         } else if (name && name !== 'Object') {
             prefix = name;
         }
 
+        const keys = isTyped ? [] : ownKeys(ctx, value).filter((k) => !(isArray && typeof k === 'string' && /^(0|[1-9]\d*)$/.test(k)));
         // 빈 배열/객체는 Node처럼 깊이와 줄바꿈 판단에 넣지 않고 바로 씁니다.
-        if ((isArray || (!isTyped && !isMap && !isSet)) && Object.keys(value).length === 0)
+        if (!isTyped && !isMap && !isSet && keys.length === 0 && (!isArray || value.length === 0))
             return (prefix ? prefix + ' ' : '') + braces[0] + braces[1];
         if (level > ctx.depth) return isArray ? '[Array]' : '[' + (name || 'Object') + ']';
+        return formatObject(ctx, value, level, prefix, braces, keys, isArray, isTyped, isMap, isSet);
+    };
+
+    /** 열거 가능한 키 (%o처럼 showHidden이면 숨은 키도: Node는 [length]처럼 씁니다) */
+    const ownKeys = (ctx, value) => {
+        const keys = Object.keys(value);
+        const symbols = Object.getOwnPropertySymbols(value);
+        const isEnumerable = (k) => Object.prototype.propertyIsEnumerable.call(value, k);
+        if (!ctx.showHidden) return keys.concat(symbols.filter(isEnumerable));
+        const hidden = (k) => ({ hidden: k });
+        return keys
+            .concat(Object.getOwnPropertyNames(value).filter((k) => !keys.includes(k)).map(hidden))
+            .concat(symbols.map((k) => (isEnumerable(k) ? k : hidden(k))));
+    };
+
+    const formatObject = (ctx, value, level, prefix, braces, keys, isArray, isTyped, isMap, isSet) => {
         if (level > ctx.deepest) ctx.deepest = level;
         ctx.seen.push(value);
         ctx.indent += 2;
@@ -362,26 +438,46 @@
         } else if (isSet) {
             value.forEach((v) => output.push(child(v)));
         }
-        if (!isTyped) {
-            for (const key of Object.keys(value)) {
-                if ((isArray) && /^(0|[1-9]\d*)$/.test(key)) continue;
-                const desc = Object.getOwnPropertyDescriptor(value, key);
-                const shownKey = IDENTIFIER.test(key) ? key : quote(key);
-                let text;
-                if (desc && (desc.get || desc.set)) text = desc.get ? (desc.set ? '[Getter/Setter]' : '[Getter]') : '[Setter]';
-                else text = child(value[key]);
-                output.push(shownKey + ': ' + text);
-            }
+        for (const entry of keys) {
+            const plain = typeof entry === 'string' || typeof entry === 'symbol';
+            const key = plain ? entry : entry.hidden;
+            const desc = Object.getOwnPropertyDescriptor(value, key);
+            const name = typeof key === 'symbol' ? key.toString() : IDENTIFIER.test(key) ? key : quote(key);
+            const shownKey = plain ? name : '[' + (typeof key === 'symbol' ? key.toString() : key) + ']';
+            let text;
+            if (desc && (desc.get || desc.set)) text = desc.get ? (desc.set ? '[Getter/Setter]' : '[Getter]') : '[Setter]';
+            else text = child(value[key]);
+            output.push(shownKey + ': ' + text);
         }
         ctx.indent -= 2;
         ctx.seen.pop();
 
+        if (ctx.circular.has(value)) {
+            const ref = '<ref *' + ctx.circular.get(value) + '>';
+            prefix = prefix ? ref + ' ' + prefix : ref;
+        }
         if (output.length === 0) return (prefix ? prefix + ' ' : '') + braces[0] + braces[1];
         return reduceToSingleString(ctx, output, prefix, braces, isArray || isTyped, level, value);
     };
 
-    const inspect = (value, top, depth = MAX_DEPTH) =>
-        formatValue({ seen: [], indent: 0, deepest: 0, depth: depth === null ? Infinity : depth }, value, 0, top);
+    const inspect = (value, top, depth = MAX_DEPTH, showHidden = false) =>
+        formatValue(
+            { seen: [], indent: 0, deepest: 0, depth: depth === null ? Infinity : depth, circular: new Map(), showHidden },
+            value,
+            0,
+            top
+        );
+
+    // Node의 hasBuiltInToString: toString을 직접 만든 객체는 %s에서 String()으로 씁니다.
+    const hasBuiltInToString = (value) => {
+        if (typeof value.toString !== 'function') return true;
+        if (Object.prototype.hasOwnProperty.call(value, 'toString')) return false;
+        let pointer = value;
+        do pointer = Object.getPrototypeOf(pointer);
+        while (pointer && !Object.prototype.hasOwnProperty.call(pointer, 'toString'));
+        const desc = pointer && Object.getOwnPropertyDescriptor(pointer, 'constructor');
+        return !!desc && typeof desc.value === 'function' && /\{\s*\[native code\]\s*\}$/.test(Function.prototype.toString.call(desc.value));
+    };
 
     const format = (args) => {
         // Node는 인자가 하나뿐이면 형식 문자열을 해석하지 않습니다. (console.log('100%%') → 100%%)
@@ -402,8 +498,13 @@
                     }
                 }
                 if (c === 'c') return '';
-                if (c === 's') return typeof a === 'string' ? a : typeof a === 'bigint' ? a + 'n' : typeof a === 'number' ? inspect(a, true) : typeof a === 'object' && a !== null ? inspect(a, false) : String(a);
-                return inspect(a, false);
+                if (c === 's') {
+                    if (typeof a === 'number' || typeof a === 'bigint') return inspect(a, true);
+                    if (typeof a !== 'object' || a === null || !hasBuiltInToString(a)) return String(a);
+                    return inspect(a, false, 0);
+                }
+                // %o는 숨은 속성까지 깊이 4로, %O는 console.log와 같게
+                return c === 'o' ? inspect(a, false, 4, true) : inspect(a, false);
             });
             return [head].concat(args.slice(i).map((a) => inspect(a, true))).join(' ');
         }
@@ -470,16 +571,38 @@
         stdinEncoding = encoding || 'utf8';
         return this;
     };
-    stdin.resume = stdin.pause = stdin.ref = stdin.unref = function () {
+    // Node의 stdin은 읽는 쪽('data'/'readable' 리스너, resume(), readline)이 생길 때까지 멈춰 있다가 흘러갑니다.
+    // 그래서 메인 코드가 끝난 뒤 await 등으로 늦게 리스너를 달아도 입력을 받습니다.
+    let mainDone = false;
+    let delivered = false;
+    let deliverScheduled = false;
+    let resumed = false;
+    const wakeReader = () => {
+        if (mainDone && !delivered && !deliverScheduled) {
+            deliverScheduled = true;
+            g.setTimeout(deliverInput, 0);
+        }
+    };
+    stdin.on = function (event, fn) {
+        EventEmitter.prototype.on.call(this, event, fn);
+        if (event === 'data' || event === 'readable') wakeReader();
+        return this;
+    };
+    stdin.resume = function () {
+        resumed = true;
+        wakeReader();
+        return this;
+    };
+    stdin.pause = stdin.ref = stdin.unref = function () {
         return this;
     };
     // 'readable' 이벤트 안에서 read()로 읽는 방식: 입력 전체를 한 번 주고 그다음은 null
-    let draining = false;
-    let stdinTaken = false;
+    let pendingRead = null;
     stdin.read = function () {
-        if (!draining || stdinTaken || stdinText.length === 0) return null;
-        stdinTaken = true;
-        return stdinEncoding ? stdinText : stdinBuffer();
+        if (!pendingRead) return null;
+        const chunk = pendingRead();
+        pendingRead = null;
+        return chunk;
     };
 
     class ExitSignal {
@@ -560,6 +683,15 @@
     // ── fs ──────────────────────────────────────────────────────────
     const STDIN_PATHS = ['/dev/stdin', 0, '0'];
     let readPos = 0;
+    /** fd 0의 현재 위치부터 끝까지 읽고 위치를 끝으로 옮깁니다. */
+    const takeRest = (asText) => {
+        const all = stdinBuffer();
+        const start = readPos;
+        readPos = all.length;
+        if (start === 0) return asText ? stdinText : all;
+        const rest = all.subarray(start);
+        return asText ? decoder.decode(rest) : rest;
+    };
     const fs = {
         readFileSync(path, options) {
             if (STDIN_PATHS.indexOf(path) === -1) {
@@ -568,7 +700,10 @@
                 throw err;
             }
             const encoding = typeof options === 'string' ? options : options && options.encoding;
-            return encoding ? stdinText : stdinBuffer();
+            // fd 0은 readSync, 스트림과 읽기 위치를 공유합니다. (두 번째 readFileSync(0)은 빈 문자열)
+            // '/dev/stdin'은 BOJ(Linux, 파일 리다이렉트)에서 파일을 새로 열므로 항상 처음부터입니다.
+            if (path === '/dev/stdin') return encoding ? stdinText : stdinBuffer();
+            return takeRest(!!encoding);
         },
         readSync(fd, buffer, offset, length, position) {
             const all = stdinBuffer();
@@ -671,6 +806,7 @@
             return iterator;
         };
         interfaces.push(rl);
+        wakeReader();
         return rl;
     };
     const readline = { createInterface };
@@ -843,27 +979,42 @@
     };
     g.__formatError = formatError;
 
-    // 메인 스크립트가 끝난 뒤 호스트가 호출: 입력 이벤트를 흘려보냅니다.
+    // 메인 스크립트가 끝난 뒤 호스트가 호출: 읽는 쪽이 있으면 입력 이벤트를 흘려보내고, 없으면 생길 때까지 기다립니다.
     g.__drainInput = () => {
-        draining = true;
-        if (stdin.listenerCount('data') > 0 && stdinText.length > 0) {
-            stdinTaken = true;
-            stdin.emit('data', stdinEncoding ? stdinText : stdinBuffer());
+        mainDone = true;
+        if (stdin.listenerCount('data') > 0 || stdin.listenerCount('readable') > 0 || interfaces.length > 0 || resumed)
+            deliverInput();
+    };
+    // 입력은 한 번만 흐릅니다. 다 흐른 뒤에 단 리스너나 만든 readline은 Node처럼 아무것도 받지 못합니다.
+    function deliverInput() {
+        if (delivered) return;
+        delivered = true;
+        // readFileSync(0)나 readSync로 이미 읽은 부분은 스트림으로 다시 오지 않습니다.
+        const start = readPos;
+        const restText = takeRest(true);
+        const restChunk = () => (stdinEncoding ? restText : start === 0 ? stdinBuffer() : stdinBuffer().subarray(start));
+        pendingRead = restText.length ? restChunk : null;
+        if (stdin.listenerCount('data') > 0 && pendingRead) {
+            pendingRead = null;
+            stdin.emit('data', restChunk());
         }
         if (stdin.listenerCount('readable') > 0) stdin.emit('readable');
-        stdin.emit('end');
-        stdin.emit('close');
         // readline은 \n, \r\n, 단독 \r을 모두 줄 끝으로 봅니다.
-        const lines = stdinText.length ? stdinText.split(/\r\n|\r|\n/) : [];
+        const lines = restText.length ? restText.split(/\r\n|\r|\n/) : [];
         if (lines.length && lines[lines.length - 1] === '') lines.pop();
         interfaces.forEach((rl) => {
             for (const line of lines) {
                 if (rl.closed) break;
                 rl.emit('line', line);
             }
-            rl.close();
         });
-    };
+        // Node처럼 끝 이벤트는 다음 차례에: 줄을 받은 뒤 await하고 단 'close' 리스너도 불립니다.
+        g.setTimeout(() => {
+            stdin.emit('end');
+            stdin.emit('close');
+            interfaces.forEach((rl) => rl.close());
+        }, 0);
+    }
     g.__exitCode = () => (typeof process.exitCode === 'number' ? process.exitCode : 0);
     // 종료 직전에 호스트가 호출: process.on('exit') 핸들러를 실행합니다.
     g.__emitExit = (code) => {
