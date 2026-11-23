@@ -230,9 +230,3 @@ export const editorThemeExtension = (id: string, prefersDark: boolean): Extensio
     }
     return extension;
 };
-
-/** 테마가 정하는 밝기. '자동'이거나 모르는 테마면 null (시스템 설정을 따름) */
-export const themeScheme = (id: string): 'light' | 'dark' | null => {
-    const found = EDITOR_THEMES.find((theme) => theme.id === id);
-    return found ? (found.dark ? 'dark' : 'light') : null;
-};

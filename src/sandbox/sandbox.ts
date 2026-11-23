@@ -78,10 +78,10 @@ const run = (req: Extract<SandboxRequest, { type: 'run' }>) => {
             finish({ status: 'internal-error', message: data.message });
             return;
         }
-        const { stdout, stderr, exitCode, truncated, timeMs } = data;
+        const { stdout, stderr, exitCode, truncated, stackOverflow, timeMs } = data;
         finish({
             status: timeMs > req.timeoutMs ? 'timeout' : exitCode === 0 ? 'ok' : 'runtime-error',
-            output: { stdout, stderr, exitCode, truncated },
+            output: { stdout, stderr, exitCode, truncated, stackOverflow },
             timeMs,
         });
     };

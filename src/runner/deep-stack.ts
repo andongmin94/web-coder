@@ -15,6 +15,7 @@
 // 섹션 단위로만 다시 조립합니다.
 //
 // C++(clang) 결과물과 Java(TeaVM wasm-gc) 결과물에 씁니다.
+import type { Jspi } from './jspi.ts';
 
 /**
  * 한 스택에서 쓰는 예상 바이트 수 (2의 거듭제곱). 브라우저 스택은 약 1MB이고,
@@ -628,33 +629,14 @@ const instrument = (module: Uint8Array, options: DeepStackOptions): DeepStackRes
     return { module: out.finish(), toOriginal };
 };
 
-export type Jspi = {
-    promising: <A extends unknown[]>(
-        fn: (...args: A) => unknown
-    ) => (...args: A) => Promise<unknown>;
-    Suspending: new <A extends unknown[]>(fn: (...args: A) => unknown) => WebAssembly.ImportValue;
-};
-
 /**
- * Python(CPython WASI 빌드): 전용 import가 없어서 proc_exit를 빌려 씁니다.
+ * WASI 프로그램(CPython, QuickJS): 전용 import가 없어서 proc_exit를 빌려 씁니다.
  * 종료 코드로는 나올 수 없는 큰 값이 grow 요청입니다.
  */
-export const PYTHON_DEEP_STACK: DeepStackOptions = {
+export const WASI_DEEP_STACK: DeepStackOptions = {
     grow: { module: 'wasi_snapshot_preview1', name: 'proc_exit' },
     idBase: 0x40000000,
 };
-
-/** 이 브라우저가 JSPI를 지원하는지 (Chrome 137+) */
-export const jspi = (): Jspi | null => {
-    const api = WebAssembly as unknown as Partial<Jspi>;
-    return typeof api.promising === 'function' && typeof api.Suspending === 'function'
-        ? (api as Jspi)
-        : null;
-};
-
-/** 브라우저의 호출 스택 한계로 난 에러인지 */
-export const isStackOverflow = (error: unknown) =>
-    error instanceof RangeError && /call stack/i.test(error.message);
 
 type Imports = Record<string, Record<string, unknown>>;
 

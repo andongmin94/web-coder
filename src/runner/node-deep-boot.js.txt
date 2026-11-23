@@ -1,0 +1,206 @@
+// node.js 깊은 재귀 모드: QuickJS 위에서 sandbox의 js-worker와 같은 순서로 사용자 코드를 실행합니다.
+// main.c가 std, os를 전역에 올려 두고, 호스트(node-deep.ts)가 아래 파일을 넣어 줍니다.
+//   /prelude.js  BOJ node.js 환경 shim (node-prelude.js.txt, V8 실행과 같은 것)
+//   /source.js   사용자 코드 (Node처럼 함수로 감싼 /main.js를 만들어 실행합니다. 오류 위치가 main.js로 나오게)
+// 표준 입력은 WASI stdin으로 들어옵니다.
+(function () {
+    'use strict';
+    const g = globalThis;
+    const qstd = g.std;
+    const qos = g.os;
+    delete g.std;
+    delete g.os;
+
+    // ── QuickJS에 없는 웹 API ──────────────────────────────────────
+    if (typeof g.TextEncoder !== 'function') {
+        g.TextEncoder = class TextEncoder {
+            get encoding() {
+                return 'utf-8';
+            }
+            encode(input = '') {
+                const s = String(input);
+                const out = [];
+                for (let i = 0; i < s.length; i++) {
+                    let c = s.charCodeAt(i);
+                    if (c >= 0xd800 && c <= 0xdbff && i + 1 < s.length) {
+                        const d = s.charCodeAt(i + 1);
+                        if (d >= 0xdc00 && d <= 0xdfff) {
+                            c = 0x10000 + ((c - 0xd800) << 10) + (d - 0xdc00);
+                            i++;
+                        } else c = 0xfffd;
+                    } else if (c >= 0xd800 && c <= 0xdfff) c = 0xfffd;
+                    if (c < 0x80) out.push(c);
+                    else if (c < 0x800) out.push(0xc0 | (c >> 6), 0x80 | (c & 63));
+                    else if (c < 0x10000) out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+                    else out.push(0xf0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+                }
+                return new Uint8Array(out);
+            }
+        };
+    }
+    if (typeof g.TextDecoder !== 'function') {
+        g.TextDecoder = class TextDecoder {
+            get encoding() {
+                return 'utf-8';
+            }
+            decode(input) {
+                if (input === undefined) return '';
+                const b = input instanceof Uint8Array ? input : new Uint8Array(input.buffer ?? input, input.byteOffset ?? 0, input.byteLength);
+                let s = '';
+                const parts = [];
+                for (let i = 0; i < b.length; ) {
+                    const c = b[i];
+                    let cp = 0xfffd;
+                    let n = 1;
+                    if (c < 0x80) cp = c;
+                    else if (c >= 0xc2 && c < 0xe0 && i + 1 < b.length) {
+                        cp = ((c & 31) << 6) | (b[i + 1] & 63);
+                        n = 2;
+                    } else if (c >= 0xe0 && c < 0xf0 && i + 2 < b.length) {
+                        cp = ((c & 15) << 12) | ((b[i + 1] & 63) << 6) | (b[i + 2] & 63);
+                        n = 3;
+                    } else if (c >= 0xf0 && c < 0xf5 && i + 3 < b.length) {
+                        cp = ((c & 7) << 18) | ((b[i + 1] & 63) << 12) | ((b[i + 2] & 63) << 6) | (b[i + 3] & 63);
+                        n = 4;
+                    }
+                    s += String.fromCodePoint(cp);
+                    if (s.length > 8192) {
+                        parts.push(s);
+                        s = '';
+                    }
+                    i += n;
+                }
+                parts.push(s);
+                return parts.join('');
+            }
+        };
+    }
+
+    // ── 타이머: 대기 중인 것을 세어 Node처럼 이벤트 루프가 빌 때까지 기다립니다 ──
+    const pending = new Map();
+    let nextId = 1;
+    let finished = false;
+    const guard = (fn, args) => {
+        if (finished) return;
+        try {
+            fn(...args);
+        } catch (error) {
+            handle(error);
+            finish();
+        }
+    };
+    g.setTimeout = (fn, ms, ...args) => {
+        const id = nextId++;
+        pending.set(
+            id,
+            qos.setTimeout(() => {
+                pending.delete(id);
+                guard(fn, args);
+            }, Math.max(0, Number(ms) || 0))
+        );
+        return id;
+    };
+    g.setInterval = (fn, ms, ...args) => {
+        const id = nextId++;
+        const delay = Math.max(0, Number(ms) || 0);
+        const tick = () => {
+            pending.set(id, qos.setTimeout(tick, delay));
+            guard(fn, args);
+        };
+        pending.set(id, qos.setTimeout(tick, delay));
+        return id;
+    };
+    g.clearTimeout = g.clearInterval = (id) => {
+        const handle = pending.get(id);
+        if (handle === undefined) return;
+        qos.clearTimeout(handle);
+        pending.delete(id);
+    };
+    g.setImmediate = (fn, ...args) => g.setTimeout(fn, 0, ...args);
+    g.clearImmediate = g.clearTimeout;
+
+    // ── 입출력 ─────────────────────────────────────────────────────
+    g.__stdin = qstd.in.readAsString();
+    g.__write = (fd, text) => (fd === 2 ? qstd.err : qstd.out).puts(text);
+
+    qstd.loadScript('/prelude.js');
+    const ExitSignal = g.__ExitSignal;
+    const formatError = g.__formatError;
+    const drainInput = g.__drainInput;
+    const emitExit = g.__emitExit;
+    const readExitCode = g.__exitCode;
+    const write = (fd, text) => (fd === 2 ? qstd.err : qstd.out).puts(text);
+
+    /** Node의 모듈 래퍼와 같은 모양. 첫 줄에 붙여서 줄 번호가 사용자 코드와 같게 합니다. */
+    const WRAPPER_HEAD =
+        'globalThis.__main = (function (exports, require, module, __filename, __dirname) {';
+    const WRAPPER_HEAD_LENGTH = WRAPPER_HEAD.length;
+
+    let exitCode = null;
+    function handle(error) {
+        if (exitCode !== null) return;
+        if (error instanceof ExitSignal) {
+            exitCode = error.code;
+            return;
+        }
+        let text = 'Uncaught ' + String(error);
+        if (error instanceof Error) {
+            // V8 실행과 같은 모양으로: "/main.js:3:5" → "main.js:3:5"
+            const stack = String(error.stack || '').replace(/\/main\.js:/g, 'main.js:');
+            text = formatError({ name: error.name, message: error.message, stack: '\n' + stack }).replace(
+                /main\.js:1:(\d+)/g,
+                (_m, col) => 'main.js:1:' + Math.max(1, Number(col) - WRAPPER_HEAD_LENGTH)
+            );
+        }
+        write(2, text + '\n');
+        exitCode = 1;
+    }
+
+    function finish() {
+        if (finished) return;
+        finished = true;
+        let code = exitCode ?? readExitCode();
+        try {
+            emitExit(code);
+            code = exitCode ?? readExitCode();
+        } catch (error) {
+            if (error instanceof ExitSignal) code = error.code;
+            else {
+                exitCode = null;
+                handle(error);
+                code = 1;
+            }
+        }
+        qstd.out.flush();
+        qstd.err.flush();
+        qstd.exit(code);
+    }
+
+    try {
+        qstd.writeFile('/main.js', WRAPPER_HEAD + qstd.loadFile('/source.js') + '\n})');
+        qstd.loadScript('/main.js');
+        const main = g.__main;
+        delete g.__main;
+        const module = g.module;
+        main.call(module.exports, module.exports, g.require, module, '/main.js', '/');
+    } catch (error) {
+        handle(error);
+    }
+    if (exitCode !== null) return finish();
+
+    // 동기 부분이 끝나면 (마이크로태스크까지 처리된 뒤) 입력 이벤트를 보내고, 타이머가 모두 끝나면 종료합니다.
+    qos.setTimeout(() => {
+        if (exitCode === null) {
+            try {
+                drainInput();
+            } catch (error) {
+                handle(error);
+            }
+        }
+        const wait = () => {
+            if (exitCode === null && pending.size > 0) qos.setTimeout(wait, 1);
+            else finish();
+        };
+        qos.setTimeout(wait, 0);
+    }, 0);
+})();

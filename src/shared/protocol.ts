@@ -19,6 +19,8 @@ export type ProblemData = {
     memoryLimitMB: number | null;
     limitText: { time: string; memory: string };
     isSpecialJudge: boolean;
+    /** 스페셜 저지 문제의 실수 허용 오차 (본문에서 찾음). 예전에 저장한 문제에는 없음 */
+    tolerance?: number | null;
     sections: ProblemSection[];
     samples: Sample[];
 };

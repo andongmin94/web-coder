@@ -182,7 +182,8 @@ const mount = async () => {
     const iframe = document.createElement('iframe');
     iframe.src = SOLVER_URL;
     iframe.title = '웹 코더';
-    iframe.allow = 'clipboard-read; clipboard-write';
+    // local-fonts: 에디터 글꼴 메뉴의 "이 PC의 모든 글꼴 불러오기" (Local Font Access API)
+    iframe.allow = 'clipboard-read; clipboard-write; local-fonts';
     root.appendChild(iframe);
     document.body.appendChild(root);
     document.documentElement.classList.add('webcoder-open-page');

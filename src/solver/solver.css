@@ -14,9 +14,7 @@
     --submit: #1a7f37;
     --submit-hover: #166c2f;
     --pass: #1a7f37;
-    --pass-bg: #e7f5ec;
     --fail: #cf222e;
-    --fail-bg: #fdecec;
     --warn: #9a6700;
     --warn-bg: #fff6dc;
     --info-bg: #e8f1fc;
@@ -25,12 +23,30 @@
     --radius-sm: 6px;
     --ui: system-ui, -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Segoe UI', sans-serif;
     --mono: 'D2Coding', 'JetBrains Mono', 'Cascadia Code', Consolas, ui-monospace, monospace;
+    /* 예제·출력 칸은 백준 예제(pre.sampledata)와 같은 글꼴 */
+    --sample-mono: Menlo, Monaco, 'Source Code Pro', Consolas, monospace;
+    /* 문제 패널은 백준 문제 페이지의 글꼴·색을 따릅니다. */
+    --boj-font:
+        'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo',
+        'Noto Sans KR', 'Malgun Gothic', sans-serif;
+    --boj-text: #333333;
+    --boj-heading: #585f69;
+    --boj-accent: #0076c0;
+    --boj-rule: #e4e9f0;
+    --boj-pre-bg: #f7f7f9;
+    --boj-pre-border: #e1e1e8;
+    /* 백준 채점 결과 색: 맞았습니다 / 틀렸습니다 / 런타임 에러 / 시간 초과 */
+    --boj-ac: #009874;
+    --boj-wa: #dd4124;
+    --boj-re: #5f4b8b;
+    --boj-tle: #fa7268;
     --problem-width: 34%;
     --results-width: 30%;
     color-scheme: light;
 }
 
-/* 에디터 테마를 고르면 data-scheme이 붙고, 시스템 설정 대신 그 테마의 밝기를 따릅니다. */
+/* 작업 공간은 시스템 설정을 따르고, ⋯ 메뉴의 "화면 밝기"로 고르면 data-scheme이 붙어 그 밝기로 고정됩니다.
+   (에디터 테마는 에디터에만 적용) */
 :root[data-scheme='dark'] {
     --bg: #1b1e23;
     --bg-soft: #20242a;
@@ -47,13 +63,21 @@
     --submit: #2ea043;
     --submit-hover: #3fb950;
     --pass: #3fb950;
-    --pass-bg: #18301f;
     --fail: #ff6b6b;
-    --fail-bg: #3a1d1f;
     --warn: #e3b341;
     --warn-bg: #352b12;
     --info-bg: #182a44;
     --shadow: 0 8px 28px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.35);
+    --boj-text: #d7dbe0;
+    --boj-heading: #b4bcc6;
+    --boj-accent: #4ea3e8;
+    --boj-rule: #343a42;
+    --boj-pre-bg: #16191d;
+    --boj-pre-border: #2f343c;
+    --boj-ac: #3fc29a;
+    --boj-wa: #ff6b57;
+    --boj-re: #a593d6;
+    --boj-tle: #ff9a8f;
     color-scheme: dark;
 }
 
@@ -74,13 +98,21 @@
         --submit: #2ea043;
         --submit-hover: #3fb950;
         --pass: #3fb950;
-        --pass-bg: #18301f;
         --fail: #ff6b6b;
-        --fail-bg: #3a1d1f;
         --warn: #e3b341;
         --warn-bg: #352b12;
         --info-bg: #182a44;
         --shadow: 0 8px 28px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.35);
+        --boj-text: #d7dbe0;
+        --boj-heading: #b4bcc6;
+        --boj-accent: #4ea3e8;
+        --boj-rule: #343a42;
+        --boj-pre-bg: #16191d;
+        --boj-pre-border: #2f343c;
+        --boj-ac: #3fc29a;
+        --boj-wa: #ff6b57;
+        --boj-re: #a593d6;
+        --boj-tle: #ff9a8f;
         color-scheme: dark;
     }
 }
@@ -132,48 +164,25 @@ kbd {
 
 #app {
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
     height: 100vh;
 }
 
-/* ── 상단 바 ─────────────────────────────── */
-.topbar {
+/* ── 문제 제목 (문제 패널 맨 위, 백준 문제 페이지처럼) ─────────────────────────────── */
+.problem-head {
     display: flex;
-    align-items: center;
-    gap: 16px;
-    min-height: 52px;
-    padding: 8px 12px 8px 16px;
-    background: var(--bg);
-    border-bottom: 1px solid var(--border);
-}
-
-.topbar-title {
-    display: flex;
+    flex-wrap: wrap;
     align-items: baseline;
-    gap: 8px;
-    min-width: 0;
-    flex: 1;
-    overflow: hidden;
-    white-space: nowrap;
-}
-
-.brand {
-    align-self: center;
-    display: inline-grid;
-    place-items: center;
-    width: 26px;
-    height: 26px;
-    border-radius: 6px;
-    background: var(--primary);
-    color: var(--primary-fg);
-    font: 700 11px/1 var(--ui);
-    letter-spacing: -0.02em;
+    gap: 6px 10px;
+    margin-bottom: 22px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--boj-rule);
+    font-family: var(--boj-font);
 }
 
 .problem-id {
-    color: var(--primary);
-    font-weight: 700;
-    font-size: 16px;
+    color: var(--boj-accent);
+    font-size: 15px;
     text-decoration: none;
 }
 
@@ -182,17 +191,18 @@ kbd {
 }
 
 .problem-title {
-    font-weight: 700;
-    font-size: 16px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    color: var(--boj-text);
+    font-size: 26px;
+    line-height: 1.3;
 }
 
 .limits {
     display: inline-flex;
+    flex-wrap: wrap;
     gap: 6px;
     color: var(--fg-muted);
     font-size: 12.5px;
+    line-height: 1.6;
 }
 
 .chip {
@@ -207,20 +217,6 @@ kbd {
 .chip-warn {
     background: var(--warn-bg);
     color: var(--warn);
-}
-
-.topbar-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-shrink: 0;
-}
-
-.divider {
-    width: 1px;
-    height: 24px;
-    margin: 0 4px;
-    background: var(--border);
 }
 
 .anchor {
@@ -297,6 +293,15 @@ kbd {
     color: var(--fg);
 }
 
+.btn-settings {
+    color: var(--fg-muted);
+}
+
+.btn-settings[aria-expanded='true'] {
+    background: var(--bg-hover);
+    color: var(--fg);
+}
+
 .btn-icon {
     width: 34px;
     padding: 0;
@@ -313,19 +318,43 @@ kbd {
     font-size: 12.5px;
 }
 
+/* 브라우저 기본 화살표 대신 얇은 V자 화살표 (두 개의 기울어진 그라데이션으로 그림, 다크 모드 색도 따라감) */
 .select {
     height: 34px;
-    padding: 0 28px 0 10px;
+    padding: 0 30px 0 10px;
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
-    background: var(--bg);
+    background-color: var(--bg);
+    background-image:
+        linear-gradient(45deg, transparent 50%, var(--fg-muted) 50%),
+        linear-gradient(135deg, var(--fg-muted) 50%, transparent 50%);
+    background-position:
+        calc(100% - 15px) 50%,
+        calc(100% - 11px) 50%;
+    background-size: 4px 4px;
+    background-repeat: no-repeat;
+    color: var(--fg);
     font-weight: 600;
     font-size: 13.5px;
     cursor: pointer;
+    appearance: none;
+}
+
+.select:hover {
+    border-color: var(--fg-faint);
+}
+
+.select:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: -1px;
 }
 
 .select-sm {
     height: 28px;
+    padding-right: 26px;
+    background-position:
+        calc(100% - 13px) 50%,
+        calc(100% - 9px) 50%;
     font-weight: 500;
     font-size: 12.5px;
 }
@@ -364,16 +393,6 @@ kbd {
 .menu-item:hover,
 .menu-row:hover {
     background: var(--bg-hover);
-}
-
-.menu-hint {
-    display: flex;
-    gap: 14px;
-    margin-top: 4px;
-    padding: 8px 10px 4px;
-    border-top: 1px solid var(--border);
-    color: var(--fg-muted);
-    font-size: 12px;
 }
 
 .popover {
@@ -420,26 +439,73 @@ body.dragging .gutter {
     outline: none;
 }
 
-/* ── 문제 ─────────────────────────────── */
+/* ── 문제: 백준 문제 페이지와 같은 모양 ─────────────────────────────── */
 #problem-pane {
-    padding: 18px 22px 48px;
-    font-size: 14.5px;
-    line-height: 1.7;
+    container-type: inline-size;
+    padding: 20px 24px 48px;
+    color: var(--boj-text);
+    font: 16px/30px var(--boj-font);
 }
 
-.problem-section + .problem-section {
-    margin-top: 22px;
+.problem-section + .problem-section,
+.problem-section + .sample-row,
+.sample-row + .problem-section,
+.sample-row + .sample-row {
+    margin-top: 28px;
 }
 
+/* 제목: 아래 점선 위에 파란 밑줄 (백준 .headline h2) */
 .problem-section h2 {
-    margin: 0 0 8px;
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--fg);
+    margin: 0 0 20px;
+    border-bottom: 1px dotted var(--boj-rule);
+    font-size: 22px;
+    font-weight: 400;
+    line-height: 1.3;
+    color: var(--boj-heading);
+}
+
+.problem-section h2 > span {
+    display: inline-block;
+    margin-bottom: -1px;
+    padding-bottom: 5px;
+    border-bottom: 2px solid var(--boj-accent);
+}
+
+.copy-button {
+    margin-left: 6px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--boj-accent);
+    font: 13px var(--boj-font);
+    cursor: pointer;
+    vertical-align: middle;
+}
+
+.copy-button:hover {
+    text-decoration: underline;
+}
+
+/* 예제 입력과 출력을 나란히 (좁으면 위아래로) */
+.sample-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 24px;
+}
+
+.sample-row .problem-section + .problem-section {
+    margin-top: 0;
+}
+
+@container (max-width: 460px) {
+    .sample-row {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 28px;
+    }
 }
 
 .problem-section-content p {
-    margin: 0 0 8px;
+    margin: 0 0 10px;
 }
 
 .problem-section-content img {
@@ -447,13 +513,25 @@ body.dragging .gutter {
     height: auto;
 }
 
-.problem-section-content pre,
+.problem-section-content pre {
+    margin: 0;
+    padding: 8px;
+    border: 1px solid var(--boj-pre-border);
+    background: var(--boj-pre-bg);
+    color: var(--boj-text);
+    font: 18px/1.43 var(--sample-mono);
+    white-space: pre-wrap;
+    word-break: break-all;
+    overflow: auto;
+}
+
 .io pre {
     margin: 0;
-    padding: 10px 12px;
-    border-radius: var(--radius-sm);
-    background: var(--bg-sunken);
-    font: 13px/1.5 var(--mono);
+    padding: 8px;
+    border: 1px solid var(--boj-pre-border);
+    background: var(--boj-pre-bg);
+    color: var(--boj-text);
+    font: 15px/1.43 var(--sample-mono);
     white-space: pre-wrap;
     word-break: break-all;
     overflow: auto;
@@ -470,7 +548,12 @@ body.dragging .gutter {
 }
 
 .problem-section-content a {
-    color: var(--primary);
+    color: var(--boj-accent);
+    text-decoration: none;
+}
+
+.problem-section-content a:hover {
+    text-decoration: underline;
 }
 
 .notice-card {
@@ -495,29 +578,104 @@ body.dragging .gutter {
 
 /* ── 에디터 ─────────────────────────────── */
 #editor-pane {
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
 }
 
-#editor,
+#editor {
+    flex: 1;
+    min-height: 0;
+}
+
 #editor .cm-editor {
     height: 100%;
+}
+
+/* 에디터 아래 동작 바: 단축키 안내 | 실행(중단) 제출 */
+.editor-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 8px 12px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-soft);
+}
+
+.editor-hint {
+    margin-right: auto;
+    overflow: hidden;
+    color: var(--fg-faint);
+    font-size: 12px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* 제출 확인 창은 버튼 위로 엽니다. */
+.popover.popover-up {
+    top: auto;
+    bottom: calc(100% + 6px);
 }
 
 #editor .cm-editor {
     font-size: var(--editor-font-size, 14.5px);
 }
 
+/* 글꼴은 메뉴에서 고를 수 있습니다. (fonts.ts, 고르지 않으면 --mono) */
 #editor .cm-scroller {
-    font-family: var(--mono);
+    font-family: var(--editor-font, var(--mono));
     line-height: 1.6;
 }
 
+/* D2Coding 합자판 등은 <<, >>, != 를 ≪ ≫ ≠ 한 글자로 그려 코드가 헷갈리므로 끕니다. */
+#editor .cm-scroller,
+pre,
+textarea {
+    font-variant-ligatures: none;
+    font-feature-settings:
+        'liga' 0,
+        'calt' 0;
+}
+
 /* ── 결과 ─────────────────────────────── */
+/* 백준 문제 페이지처럼 흰 바탕에 예제 칸만 연회색.
+   overflow는 설정 창이 결과 패널 밖(에디터 쪽)으로도 펼쳐지도록 visible (목록은 .test-list가 스크롤) */
 #results-pane {
     display: flex;
     flex-direction: column;
-    overflow: hidden;
-    background: var(--bg-soft);
+    overflow: visible;
+    background: var(--bg);
+}
+
+/* 결과 패널 맨 위: 언어 · 설정 | 문제 접기 · 닫기 */
+.results-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px 8px 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+}
+
+.results-toolbar .select {
+    min-width: 0;
+    flex: 0 1 180px;
+}
+
+.results-toolbar .btn-toggle-problem {
+    margin-left: auto;
+}
+
+/* 설정 창은 버튼 왼쪽 끝에 맞춰 결과 패널 쪽으로 펼칩니다. */
+.results-toolbar #settings {
+    left: 0;
+    right: auto;
+}
+
+.menu.menu-up {
+    top: auto;
+    bottom: calc(100% + 6px);
 }
 
 .results-head {
@@ -575,17 +733,13 @@ body.dragging .gutter {
     }
 }
 
+/* 컴파일 에러/경고: 색 배경 없이 백준 예제 칸 모양, 제목 글씨만 색 */
 .compile-box {
     margin: 10px 10px 0;
-    border-radius: var(--radius);
-    border: 1px solid var(--fail);
-    background: var(--fail-bg);
+    border: 1px solid var(--boj-pre-border);
+    background: var(--boj-pre-bg);
+    color: var(--boj-text);
     overflow: hidden;
-}
-
-.compile-box.compile-warning {
-    border-color: var(--warn);
-    background: var(--warn-bg);
 }
 
 .compile-box h3 {
@@ -604,7 +758,7 @@ body.dragging .gutter {
     padding: 8px 12px 12px;
     max-height: 260px;
     overflow: auto;
-    font: 12.5px/1.5 var(--mono);
+    font: 13px/1.5 var(--sample-mono);
     white-space: pre-wrap;
     word-break: break-word;
 }
@@ -612,92 +766,77 @@ body.dragging .gutter {
 .test-list {
     flex: 1;
     overflow: auto;
-    padding: 10px;
+    padding: 14px 12px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 22px;
 }
 
+/* 예제·내 테스트: 백준 예제 제목처럼 점선 위 파란 밑줄 제목, 카드 테두리 없음 */
 .test {
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--bg);
-}
-
-.test.is-fail {
-    border-color: color-mix(in srgb, var(--fail) 45%, var(--border));
+    padding: 0 4px;
 }
 
 .test-row {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     gap: 10px;
     width: 100%;
-    padding: 9px 10px 9px 12px;
+    padding: 0;
     border: 0;
+    border-bottom: 1px dotted var(--boj-rule);
     background: none;
     text-align: left;
     cursor: pointer;
 }
 
-.test-row:hover {
-    background: var(--bg-hover);
-    border-radius: var(--radius);
-}
-
-.test-icon {
-    display: inline-grid;
-    place-items: center;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    font-size: 11px;
-    font-weight: 800;
-    flex-shrink: 0;
-    background: var(--bg-sunken);
-    color: var(--fg-faint);
-}
-
-.icon-pass {
-    background: var(--pass);
-    color: #fff;
-}
-
-.icon-fail,
-.icon-error,
-.icon-timeout,
-.icon-olimit {
-    background: var(--fail);
-    color: #fff;
-}
-
-.icon-output {
-    background: var(--warn);
-    color: #fff;
+.test-row .spinner {
+    align-self: center;
 }
 
 .test-name {
-    font-weight: 600;
+    display: inline-block;
+    flex-shrink: 0;
+    margin-bottom: -1px;
+    padding-bottom: 5px;
+    border-bottom: 2px solid var(--boj-accent);
+    color: var(--boj-heading);
+    font: 19px/1.3 var(--boj-font);
+}
+
+.test-row:hover .test-name {
+    color: var(--boj-accent);
+}
+
+.test-row > :not(.test-name) {
+    padding-bottom: 7px;
 }
 
 .test-verdict {
-    font-size: 12.5px;
-    font-weight: 600;
+    font-size: 13px;
+    font-weight: 700;
 }
 
+/* 백준 채점 결과 색 */
 .verdict-pass {
-    color: var(--pass);
+    color: var(--boj-ac);
 }
 
-.verdict-fail,
-.verdict-error,
+.verdict-fail {
+    color: var(--boj-wa);
+}
+
+.verdict-error {
+    color: var(--boj-re);
+}
+
 .verdict-timeout,
 .verdict-olimit {
-    color: var(--fail);
+    color: var(--boj-tle);
 }
 
 .verdict-output {
-    color: var(--warn);
+    color: var(--fg-muted);
 }
 
 .verdict-muted {
@@ -706,8 +845,20 @@ body.dragging .gutter {
 
 .test-time {
     margin-left: auto;
+    flex-shrink: 0;
     color: var(--fg-faint);
     font: 12px var(--mono);
+}
+
+/* 접힌 카드의 입력 첫 줄 */
+.test-preview {
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--fg-faint);
+    font: 12px var(--mono);
+    white-space: pre;
+    text-overflow: ellipsis;
 }
 
 .test-time.is-slow {
@@ -727,59 +878,67 @@ body.dragging .gutter {
 .test-body {
     display: grid;
     gap: 10px;
-    padding: 2px 12px 12px;
+    padding: 14px 0 4px;
 }
 
+/* 입력 / 기대 출력 / 실제 출력 제목: 백준 예제 제목처럼 점선 위 파란 밑줄 */
 .io-label {
     display: flex;
     align-items: baseline;
     gap: 8px;
-    margin-bottom: 4px;
-    color: var(--fg-muted);
-    font-size: 12px;
-    font-weight: 600;
+    margin-bottom: 10px;
+    border-bottom: 1px dotted var(--boj-rule);
+    color: var(--boj-heading);
+    font: 15px/1.3 var(--boj-font);
 }
 
-.io-label .note {
-    color: var(--fail);
-    font-weight: 500;
+.io-title {
+    display: inline-block;
+    margin-bottom: -1px;
+    padding-bottom: 4px;
+    border-bottom: 2px solid var(--boj-accent);
 }
 
 .io pre {
     max-height: 220px;
 }
 
-.io-stderr pre {
-    box-shadow: inset 3px 0 0 var(--warn);
-}
-
 .diff-line {
     display: block;
-    min-height: 1.5em;
+    min-height: 1.43em;
 }
 
+/* 실제 출력에서 기대 출력과 다른 줄: 색 배경 없이 글씨만 빨갛게 */
 .diff-bad {
-    background: var(--fail-bg);
-    box-shadow: inset 3px 0 0 var(--fail);
-    margin: 0 -12px;
-    padding: 0 12px;
+    color: var(--fail);
 }
 
-.diff-miss {
-    background: var(--pass-bg);
-    box-shadow: inset 3px 0 0 var(--pass);
-    margin: 0 -12px;
-    padding: 0 12px;
+/* 그 줄 안에서 실제로 다른 글자 (공백은 ·로 보여 줌) */
+.diff-char {
+    background: none;
+    color: inherit;
+    text-decoration: underline 2px;
+    text-underline-offset: 3px;
+}
+
+/* 기대 출력에는 있는데 실제 출력에는 없는 글자 자리 */
+.diff-gap {
+    display: inline-block;
+    width: 2px;
+    height: 1.1em;
+    margin: 0 1px;
+    vertical-align: text-bottom;
+    background: var(--fail);
 }
 
 .io-edit {
     width: 100%;
     min-height: 64px;
-    padding: 8px 10px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--bg-sunken);
-    font: 13px/1.5 var(--mono);
+    padding: 8px;
+    border: 1px solid var(--boj-pre-border);
+    background: var(--boj-pre-bg);
+    color: var(--boj-text);
+    font: 15px/1.43 var(--sample-mono);
     resize: vertical;
 }
 
@@ -833,6 +992,25 @@ body.dragging .gutter {
     color: #fff;
 }
 
+/* ── 문제 패널 접기 (상단 ◧ 버튼) ─────────────────────────────── */
+:root.problem-collapsed #problem-pane,
+:root.problem-collapsed #gutter-problem {
+    display: none;
+}
+
+:root.problem-collapsed #panes {
+    grid-template-columns: minmax(320px, 1fr) 5px minmax(260px, var(--results-width));
+}
+
+.btn-toggle-problem[aria-pressed='true'] {
+    background: var(--info-bg);
+    color: var(--primary);
+}
+
+.menu-item-muted {
+    color: var(--fg-muted);
+}
+
 /* ── 좁은 화면: 결과를 에디터 아래로 ─────────────────────────────── */
 @media (max-width: 1180px) {
     #panes {
@@ -857,9 +1035,15 @@ body.dragging .gutter {
         grid-row: 2;
         border-top: 1px solid var(--border);
     }
-    .limits,
-    kbd {
+    .editor-hint {
         display: none;
+    }
+    :root.problem-collapsed #panes {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    :root.problem-collapsed #editor-pane,
+    :root.problem-collapsed #results-pane {
+        grid-column: 1;
     }
 }
 
@@ -945,9 +1129,10 @@ li[aria-selected] .cm-completionDetail {
     text-decoration-skip-ink: none;
 }
 
-/* ── ⋯ 메뉴의 에디터 설정 ─────────────────────────────── */
+/* ── 설정 창 (상단 오른쪽 ⚙ 설정) ─────────────────────────────── */
 .menu {
     min-width: 290px;
+    overflow-y: auto;
 }
 
 .menu-row input[type='checkbox'] {
@@ -966,4 +1151,24 @@ li[aria-selected] .cm-completionDetail {
 
 .menu-row > span {
     white-space: nowrap;
+}
+
+.menu-row .select-sm {
+    max-width: 170px;
+}
+
+.menu-input {
+    width: 170px;
+    height: 28px;
+    padding: 0 8px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--fg);
+    font: 12.5px var(--ui);
+}
+
+.menu-input:focus {
+    outline: 2px solid var(--primary);
+    outline-offset: -1px;
 }

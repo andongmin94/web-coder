@@ -11,7 +11,7 @@ import {
 } from './cpp-header.ts';
 import { BITS_EXTCXX, PBDS_TREE } from './cpp-pbds.ts';
 import { getPch, pchKey, putPch } from './pch-cache.ts';
-import type { CompilerRequest, CompilerResponse } from './types.ts';
+import { CPP_STACK_SIZE, type CompilerRequest, type CompilerResponse } from './types.ts';
 
 declare const COMPILER_VERSION: string;
 
@@ -88,7 +88,7 @@ const pchKeyFor = (std: string, exceptions: boolean) =>
     pchKey(COMPILER_VERSION, exceptions ? `${std}+eh` : std, PCH_SEED);
 
 /** 사용자 프로그램의 선형 메모리 스택 크기 (재귀 깊이 한계). BOJ는 스택이 메모리 제한까지 허용됩니다. */
-const STACK_SIZE = 64 << 20;
+const STACK_SIZE = CPP_STACK_SIZE;
 
 const pchMemory = new Map<string, Uint8Array>();
 

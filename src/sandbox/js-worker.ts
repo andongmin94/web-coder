@@ -32,6 +32,7 @@ export function jsWorkerMain(prelude: string) {
         let stdout = '';
         let stderr = '';
         let truncated = false;
+        let stackOverflow = false;
         class OutputLimit {}
 
         // 시간 초과로 강제 종료돼도 그때까지의 출력을 보여 줄 수 있게 실행 중에 흘려보냅니다.
@@ -125,6 +126,15 @@ export function jsWorkerMain(prelude: string) {
                 text = formatError(error).replace(/main\.js:1:(\d+)/g, (_m, col: string) => {
                     return `main.js:1:${Math.max(1, Number(col) - WRAPPER_HEAD.length)}`;
                 });
+                if (error instanceof RangeError && /call stack/i.test(error.message)) {
+                    stackOverflow = true;
+                    // Chrome 137 이상에서는 실행기(pool.ts)가 이 에러를 보고 깊은 재귀 모드로 다시 실행하므로
+                    // 이 안내는 그 모드를 쓸 수 없을 때만 보입니다.
+                    text +=
+                        '\n(브라우저의 호출 스택 한계로 재귀 깊이가 수천 정도에서 막힙니다. ' +
+                        '백준은 node --stack-size=65536으로 실행해 훨씬 깊은 재귀도 되므로 제출하면 통과할 수 있습니다. ' +
+                        'Chrome 137 이상에서는 자동으로 깊은 재귀 모드로 다시 실행합니다.)';
+                }
             }
             stderr += text + '\n';
             exitCode = 1;
@@ -183,6 +193,7 @@ export function jsWorkerMain(prelude: string) {
             stderr,
             exitCode: code,
             truncated,
+            stackOverflow,
             timeMs: now() - started,
         });
     };

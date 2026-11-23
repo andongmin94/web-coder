@@ -10,6 +10,7 @@ import {
 } from '../shared/protocol.ts';
 import {
     RUNTIMES,
+    judgeMemoryLimitMB,
     judgeTimeLimitMs,
     localTimeoutMs,
     resolveLanguages,
@@ -18,7 +19,7 @@ import {
 } from '../shared/languages.ts';
 import { RunnerPool } from '../runner/pool.ts';
 import { CodeEditor } from './editor.ts';
-import { AUTO_THEME, EDITOR_THEMES, themeScheme } from './themes.ts';
+import { setupEditorSettings } from './editor-settings.ts';
 import { limitChips, renderProblem, renderProblemMissing } from './problem-view.ts';
 import {
     isBadVerdict,
@@ -26,6 +27,7 @@ import {
     verdictOf,
     type TestCase,
     type TestState,
+    type JudgeContext,
     type Verdict,
 } from './tests-view.ts';
 import { storage, type CustomTest } from './storage.ts';
@@ -48,6 +50,14 @@ if (window.parent === window || !isBojOrigin(parentOrigin)) {
 const bojOrigin: string = parentOrigin!;
 const send = (message: SolverToParent) => window.parent.postMessage(message, bojOrigin);
 
+/** 템플릿을 나눠 저장하는 단위 (C++17과 C++20은 같은 템플릿) */
+const LANGUAGE_GROUP: Record<RuntimeKey, string> = {
+    cpp: 'C++',
+    python: 'Python',
+    javascript: 'node.js',
+    java: 'Java',
+};
+
 const RUNTIME_NAME: Record<RuntimeKey, string> = {
     cpp: 'C++ 컴파일러',
     python: 'Python 실행기',
@@ -64,7 +74,10 @@ let current: ResolvedLanguage | null = null;
 let codeOpenValue: string | null = null;
 let customTests: CustomTest[] = [];
 const testStates = new Map<string, TestState>();
+/** 펼쳐 둔 내 테스트 */
 const openTests = new Set<string>();
+/** 접어 둔 예제 (예제는 기본으로 펼침) */
+const closedSamples = new Set<string>();
 /** 이 세션에서 한 번이라도 준비가 끝난 런타임 (첫 로딩 안내용) */
 const warmed = new Set<RuntimeKey>();
 
@@ -80,9 +93,30 @@ let lastRun: {
     verdicts: Verdict[];
     compileError: boolean;
 } | null = null;
+/** 마지막 실행에 걸린 시간: 컴파일(C++, Java)과 예제 실행을 나눠 상태 줄에 보여 줍니다. */
+let lastTiming: { compileMs: number | null; firstLoad: boolean; runMs: number | null } | null =
+    null;
+
+const formatDuration = (ms: number) =>
+    ms >= 1000 ? `${(ms / 1000).toFixed(1)}초` : `${Math.max(0, Math.round(ms))}ms`;
+
+const timingText = () => {
+    if (!lastTiming) return null;
+    const parts: string[] = [];
+    if (lastTiming.compileMs !== null) {
+        parts.push(
+            lastTiming.compileMs < 30
+                ? '컴파일 결과 재사용'
+                : `컴파일 ${formatDuration(lastTiming.compileMs)}${lastTiming.firstLoad ? ' (컴파일러 불러오기 포함)' : ''}`
+        );
+    }
+    if (lastTiming.runMs !== null) parts.push(`실행 ${formatDuration(lastTiming.runMs)}`);
+    return parts.length ? parts.join(' · ') : null;
+};
 
 // ── 요소 ─────────────────────────────────────────────────────────
 const problemPane = $('#problem-pane');
+const problemContent = $('#problem-content');
 const problemLink = $<HTMLAnchorElement>('#problem-link');
 const problemTitle = $('#problem-title');
 const problemLimits = $('#problem-limits');
@@ -93,8 +127,8 @@ const stopButton = $<HTMLButtonElement>('#stop');
 const submitButton = $<HTMLButtonElement>('#submit');
 const confirmBox = $('#confirm');
 const confirmText = $('#confirm-text');
-const moreButton = $<HTMLButtonElement>('#more');
-const menu = $('#menu');
+const settingsButton = $<HTMLButtonElement>('#settings-button');
+const settingsPanel = $('#settings');
 const resetButton = $<HTMLButtonElement>('#reset');
 const closeButton = $<HTMLButtonElement>('#close');
 const addTestButton = $<HTMLButtonElement>('#add-test');
@@ -146,18 +180,45 @@ const allTests = (): TestCase[] => [
     })),
 ];
 
-const specialJudge = () => problem?.isSpecialJudge ?? false;
+const judgeContext = (): JudgeContext => ({
+    specialJudge: problem?.isSpecialJudge ?? false,
+    tolerance: problem?.tolerance ?? null,
+    memoryLimitMB:
+        current && problem?.memoryLimitMB
+            ? judgeMemoryLimitMB(current, problem.memoryLimitMB)
+            : null,
+});
+
+/** 예제는 펼친 채로 시작하고(접은 것만 기억), 내 테스트는 펼친 것만 기억합니다. */
+const isOpen = (id: string) =>
+    id.startsWith('sample-') ? !closedSamples.has(id) : openTests.has(id);
+const setOpen = (id: string, open: boolean) => {
+    if (id.startsWith('sample-')) {
+        if (open) closedSamples.delete(id);
+        else closedSamples.add(id);
+    } else if (open) openTests.add(id);
+    else openTests.delete(id);
+};
 
 const callbacks = {
     onToggle: (id: string) => {
-        if (openTests.has(id)) openTests.delete(id);
-        else openTests.add(id);
+        setOpen(id, !isOpen(id));
         const test = allTests().find((t) => t.id === id);
         if (test) renderOne(test);
     },
     onChangeCustom: (id: string, patch: { input?: string; expected?: string }) => {
         customTests = customTests.map((t) => (t.id === id ? { ...t, ...patch } : t));
         if (problemId) void storage.setCustomTests(problemId, customTests);
+    },
+    onDuplicate: (test: TestCase) => {
+        const id = `custom-${Date.now()}`;
+        customTests = [...customTests, { id, input: test.input, expected: test.expected }];
+        openTests.add(id);
+        if (problemId) void storage.setCustomTests(problemId, customTests);
+        renderTests();
+        const card = testList.querySelector(`[data-id="${id}"]`);
+        card?.scrollIntoView({ block: 'nearest' });
+        card?.querySelector('textarea')?.focus();
     },
     onDeleteCustom: (id: string) => {
         customTests = customTests.filter((t) => t.id !== id);
@@ -172,8 +233,8 @@ const renderCard = (t: TestCase) =>
     renderTest(
         t,
         testStates.get(t.id) ?? { phase: 'idle' },
-        openTests.has(t.id),
-        specialJudge(),
+        isOpen(t.id),
+        judgeContext(),
         judgeLimitMs(),
         callbacks
     );
@@ -206,7 +267,7 @@ const renderOne = (test: TestCase) => {
 const doneVerdicts = (): Verdict[] =>
     allTests().flatMap((t) => {
         const s = testStates.get(t.id);
-        return s?.phase === 'done' ? [verdictOf(t, s.result, specialJudge())] : [];
+        return s?.phase === 'done' ? [verdictOf(t, s.result, judgeContext())] : [];
     });
 
 const renderStatus = () => {
@@ -225,6 +286,8 @@ const renderStatus = () => {
         }
     } else if (compileMessage?.kind === 'error') {
         parts.push(h('span', { class: 'status-fail' }, '✕ 컴파일 에러'));
+        const timing = timingText();
+        if (timing) parts.push(h('span', { class: 'status-sub' }, timing));
     } else {
         const verdicts = doneVerdicts();
         if (verdicts.length === 0) {
@@ -243,6 +306,8 @@ const renderStatus = () => {
                 parts.push(
                     h('span', { class: 'status-fail' }, `✕ ${passed}/${judged.length} 통과`)
                 );
+            const timing = timingText();
+            if (timing) parts.push(h('span', { class: 'status-sub' }, timing));
         }
     }
     statusBox.replaceChildren(...parts);
@@ -304,9 +369,16 @@ const runTests = async () => {
         total: tests.length,
     });
     renderTests();
+    lastTiming = null;
 
     try {
+        const compileStarted = performance.now();
         const compiled = await pool.compile(lang, source);
+        lastTiming = {
+            compileMs: needsCompile ? performance.now() - compileStarted : null,
+            firstLoad: needsCompile && firstTime,
+            runMs: null,
+        };
         if (cancelRequested) {
             for (const t of tests) testStates.set(t.id, { phase: 'idle' });
             return;
@@ -316,8 +388,6 @@ const runTests = async () => {
             compileMessage = { kind: 'error', text: compiled.diagnostics };
             for (const t of tests) {
                 testStates.set(t.id, { phase: 'skipped' });
-                // 컴파일 에러에 집중하도록 예제는 접습니다. (직접 입력하는 내 테스트는 유지)
-                if (t.kind === 'sample') openTests.delete(t.id);
             }
             lastRun = { source, languageId: lang.id, verdicts: [], compileError: true };
             return;
@@ -335,6 +405,7 @@ const runTests = async () => {
             lang.runtime,
             problem?.timeLimitSec ?? DEFAULT_TIME_LIMIT_SEC
         );
+        const runStarted = performance.now();
         await Promise.all(
             tests.map(async (test) => {
                 testStates.set(test.id, { phase: 'running' });
@@ -347,14 +418,15 @@ const runTests = async () => {
                 );
                 testStates.set(test.id, { phase: 'done', result });
                 warmed.add(lang.runtime);
-                const verdict = verdictOf(test, result, specialJudge());
-                // 실패한 예제는 펼치고, 통과한 예제는 접습니다.
-                if (isBadVerdict(verdict)) openTests.add(test.id);
-                else if (verdict === 'pass') openTests.delete(test.id);
+                const verdict = verdictOf(test, result, judgeContext());
+                // 실패한 테스트는 접어 두었더라도 펼쳐서 보여 줍니다.
+                if (isBadVerdict(verdict)) setOpen(test.id, true);
                 stage = { kind: 'running', done: ++done, total: tests.length };
                 renderOne(test);
             })
         );
+        // 예제는 병렬로 돌므로 모든 예제가 끝날 때까지의 시간 (런타임을 처음 불러오는 시간 포함)
+        lastTiming.runMs = performance.now() - runStarted;
         lastRun = { source, languageId: lang.id, verdicts: doneVerdicts(), compileError: false };
     } catch (error) {
         showToast(error instanceof Error ? error.message : String(error), 'error');
@@ -412,12 +484,14 @@ const switchLanguage = async (lang: ResolvedLanguage, initialCode?: string) => {
     void storage.updatePrefs({ lastLanguageLabel: lang.label });
 
     const saved = problemId ? await storage.getCode(problemId, lang.id) : undefined;
-    const code = initialCode ?? saved ?? RUNTIMES[lang.runtime].template;
+    const code = initialCode ?? saved ?? (await templateFor(lang.runtime));
     editor.load(code, RUNTIMES[lang.runtime], intelFor(lang));
+    void updateTemplateMenu();
     pool.warmUp(lang);
 
     compileMessage = null;
     testStates.clear();
+    lastTiming = null;
     renderTests();
 };
 
@@ -450,7 +524,7 @@ const requestSubmit = () => {
         return;
     }
     confirmText.textContent = `${warning} 그래도 제출할까요?`;
-    menu.hidden = true;
+    settingsPanel.hidden = true;
     confirmBox.hidden = false;
     $<HTMLButtonElement>('#confirm-cancel').focus();
 };
@@ -489,7 +563,8 @@ const renderHeader = () => {
 const applyProblem = (next: ProblemData) => {
     problem = next;
     renderHeader();
-    renderProblem(problemPane, next);
+    renderProblem(problemContent, next);
+    problemPane.scrollTop = 0;
     for (const key of [...testStates.keys()]) if (key.startsWith('sample-')) testStates.delete(key);
     renderTests();
 };
@@ -504,7 +579,7 @@ const init = async (data: {
     problemId = data.problemId;
     renderHeader();
     if (data.problem) applyProblem(data.problem);
-    else renderProblemMissing(problemPane, `${bojOrigin}/problem/${problemId}`);
+    else renderProblemMissing(problemContent, `${bojOrigin}/problem/${problemId}`);
 
     // 공개 설정
     codeOpenSelect.replaceChildren(
@@ -580,30 +655,74 @@ $('#confirm-cancel').addEventListener('click', () => {
 });
 closeButton.addEventListener('click', restore);
 
-moreButton.addEventListener('click', () => {
-    menu.hidden = !menu.hidden;
-    moreButton.setAttribute('aria-expanded', String(!menu.hidden));
+settingsButton.addEventListener('click', () => {
+    settingsPanel.hidden = !settingsPanel.hidden;
+    settingsButton.setAttribute('aria-expanded', String(!settingsPanel.hidden));
     closeConfirm();
+    if (settingsPanel.hidden) return;
+    // 좁은 화면에서는 결과 패널이 아래쪽이라, 아래 공간이 모자라면 위로 엽니다.
+    const button = settingsButton.getBoundingClientRect();
+    const below = window.innerHeight - button.bottom - 12;
+    const above = button.top - 12;
+    const up = settingsPanel.scrollHeight > below && above > below;
+    settingsPanel.classList.toggle('menu-up', up);
+    settingsPanel.style.maxHeight = `${Math.max(160, up ? above : below)}px`;
 });
-resetButton.addEventListener('click', () => {
-    menu.hidden = true;
+// ── 템플릿: 언어(런타임)별로 내 템플릿을 저장해 새 문제와 초기화에 씁니다 ──
+const saveTemplateButton = $<HTMLButtonElement>('#save-template');
+const clearTemplateButton = $<HTMLButtonElement>('#clear-template');
+
+/** 내 템플릿이 있으면 그것, 없으면 기본 템플릿 */
+const templateFor = async (runtime: RuntimeKey) =>
+    (await storage.getTemplate(runtime)) ?? RUNTIMES[runtime].template;
+
+const updateTemplateMenu = async () => {
     if (!current) return;
-    if (!confirm('코드를 기본 템플릿으로 되돌릴까요? 지금 코드는 사라집니다.')) return;
-    editor.load(RUNTIMES[current.runtime].template, RUNTIMES[current.runtime], intelFor(current));
+    const custom = await storage.getTemplate(current.runtime);
+    resetButton.textContent = custom ? '내 템플릿으로 초기화' : '템플릿으로 초기화';
+    clearTemplateButton.hidden = custom === undefined;
+};
+
+resetButton.addEventListener('click', async () => {
+    settingsPanel.hidden = true;
+    if (!current) return;
+    const lang = current;
+    const custom = await storage.getTemplate(lang.runtime);
+    const what = custom ? '내 템플릿' : '기본 템플릿';
+    if (!confirm(`코드를 ${what}으로 되돌릴까요? 지금 코드는 사라집니다.`)) return;
+    editor.load(custom ?? RUNTIMES[lang.runtime].template, RUNTIMES[lang.runtime], intelFor(lang));
     saveCodeNow();
+});
+saveTemplateButton.addEventListener('click', async () => {
+    settingsPanel.hidden = true;
+    if (!current) return;
+    const lang = current;
+    await storage.setTemplate(lang.runtime, editor.value);
+    await updateTemplateMenu();
+    showToast(
+        `${LANGUAGE_GROUP[lang.runtime]} 템플릿으로 저장했습니다. 새 문제를 열면 이 코드로 시작합니다.`
+    );
+});
+clearTemplateButton.addEventListener('click', async () => {
+    settingsPanel.hidden = true;
+    if (!current) return;
+    const lang = current;
+    await storage.setTemplate(lang.runtime, null);
+    await updateTemplateMenu();
+    showToast(`${LANGUAGE_GROUP[lang.runtime]} 템플릿을 기본으로 되돌렸습니다.`);
 });
 document.addEventListener('click', (e) => {
     const target = e.target as Node;
-    if (!menu.hidden && !menu.contains(target) && target !== moreButton) {
-        menu.hidden = true;
-        moreButton.setAttribute('aria-expanded', 'false');
+    if (!settingsPanel.hidden && !settingsPanel.contains(target) && target !== settingsButton) {
+        settingsPanel.hidden = true;
+        settingsButton.setAttribute('aria-expanded', 'false');
     }
     if (!confirmBox.hidden && !confirmBox.contains(target) && target !== submitButton)
         closeConfirm();
 });
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-        menu.hidden = true;
+        settingsPanel.hidden = true;
         closeConfirm();
     }
     // 에디터 밖에 포커스가 있어도 단축키가 동작하게 합니다. (에디터 안에서는 에디터가 처리)
@@ -628,7 +747,24 @@ addTestButton.addEventListener('click', () => {
 });
 window.addEventListener('beforeunload', saveCodeNow);
 
-void storage.getPrefs().then((prefs) => setupSplit(prefs));
+// ── 문제 패널 접기 ───────────────────────────────────────────────
+const toggleProblemButton = $<HTMLButtonElement>('#toggle-problem');
+const setProblemCollapsed = (collapsed: boolean) => {
+    document.documentElement.classList.toggle('problem-collapsed', collapsed);
+    toggleProblemButton.setAttribute('aria-pressed', String(collapsed));
+    toggleProblemButton.title = collapsed ? '문제 펼치기' : '문제 접기';
+    editor.refresh();
+};
+toggleProblemButton.addEventListener('click', () => {
+    const collapsed = !document.documentElement.classList.contains('problem-collapsed');
+    setProblemCollapsed(collapsed);
+    void storage.updatePrefs({ problemCollapsed: collapsed });
+});
+
+void storage.getPrefs().then((prefs) => {
+    setupSplit(prefs);
+    setProblemCollapsed(prefs.problemCollapsed === true);
+});
 renderStatus();
 
 window.addEventListener('message', (event: MessageEvent) => {
@@ -642,67 +778,4 @@ window.addEventListener('message', (event: MessageEvent) => {
 
 send({ type: 'ready' });
 
-// ── 에디터 설정 (테마, 글자 크기, 줄바꿈) ───────────────────────
-const themeSelect = $<HTMLSelectElement>('#editor-theme');
-const fontSizeSelect = $<HTMLSelectElement>('#editor-font-size');
-const wrapCheckbox = $<HTMLInputElement>('#editor-wrap');
-const FONT_SIZES = [12, 13, 14, 14.5, 15, 16, 18, 20];
-const DEFAULT_FONT_SIZE = 14.5;
-
-// 출처별로 묶고, 그 안에서 밝은 테마를 먼저 보여 줍니다.
-const themeGroups = [...new Set(EDITOR_THEMES.map((theme) => theme.group))].map((group) =>
-    h(
-        'optgroup',
-        { label: group },
-        EDITOR_THEMES.filter((theme) => theme.group === group)
-            .sort((x, y) => Number(x.dark) - Number(y.dark))
-            .map((theme) =>
-                h('option', { value: theme.id }, `${theme.name}${theme.dark ? ' ●' : ' ○'}`)
-            )
-    )
-);
-themeSelect.replaceChildren(h('option', { value: AUTO_THEME }, '시스템 설정 따름'), ...themeGroups);
-fontSizeSelect.replaceChildren(
-    ...FONT_SIZES.map((size) => h('option', { value: String(size) }, `${size}px`))
-);
-
-/** 테마를 에디터에 적용하고, 작업 공간 전체의 밝기도 그 테마에 맞춥니다. */
-const applyTheme = (id: string) => {
-    editor.setTheme(id);
-    const scheme = themeScheme(id);
-    if (scheme) document.documentElement.dataset.scheme = scheme;
-    else delete document.documentElement.dataset.scheme;
-};
-const applyFontSize = (size: number) => {
-    document.documentElement.style.setProperty('--editor-font-size', `${size}px`);
-    editor.refresh();
-};
-
-void storage.getPrefs().then((prefs) => {
-    const theme = EDITOR_THEMES.some((t) => t.id === prefs.editorTheme)
-        ? prefs.editorTheme!
-        : AUTO_THEME;
-    const size = FONT_SIZES.includes(prefs.editorFontSize ?? NaN)
-        ? prefs.editorFontSize!
-        : DEFAULT_FONT_SIZE;
-    themeSelect.value = theme;
-    fontSizeSelect.value = String(size);
-    wrapCheckbox.checked = prefs.editorWrap === true;
-    applyTheme(theme);
-    applyFontSize(size);
-    editor.setWrap(wrapCheckbox.checked);
-});
-
-themeSelect.addEventListener('change', () => {
-    applyTheme(themeSelect.value);
-    void storage.updatePrefs({ editorTheme: themeSelect.value });
-});
-fontSizeSelect.addEventListener('change', () => {
-    const size = Number(fontSizeSelect.value);
-    applyFontSize(size);
-    void storage.updatePrefs({ editorFontSize: size });
-});
-wrapCheckbox.addEventListener('change', () => {
-    editor.setWrap(wrapCheckbox.checked);
-    void storage.updatePrefs({ editorWrap: wrapCheckbox.checked });
-});
+setupEditorSettings(editor, showToast);

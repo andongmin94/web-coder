@@ -71,8 +71,18 @@ export class CodeEditor {
         });
     }
 
+    /** "화면 밝기"를 직접 고른 경우 (null이면 시스템 설정) */
+    private scheme: 'light' | 'dark' | null = null;
+
     private themeExt(): Extension {
-        return editorThemeExtension(this.theme, this.darkQuery.matches);
+        const dark = this.scheme ? this.scheme === 'dark' : this.darkQuery.matches;
+        return editorThemeExtension(this.theme, dark);
+    }
+
+    /** 자동 테마가 따를 밝기. 화면 밝기를 고르면 시스템 설정 대신 그것을 따릅니다. */
+    setScheme(scheme: 'light' | 'dark' | null) {
+        this.scheme = scheme;
+        this.view.dispatch({ effects: this.themeSlot.reconfigure(this.themeExt()) });
     }
 
     private wrapExt(): Extension {

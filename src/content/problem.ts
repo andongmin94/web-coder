@@ -3,6 +3,7 @@
 // BOJ는 주소창으로 연 페이지 이동에만 본문을 주고, fetch·iframe 요청에는 빈 응답을 줍니다.
 // 그래서 사용자가 문제 페이지(/problem/*)를 열 때 그 페이지에서 읽어 저장해 두고,
 // 제출 페이지는 저장된 데이터를 씁니다.
+import { findTolerance } from '../judge/judge.ts';
 import type { ProblemData, ProblemSection, Sample } from '../shared/protocol.ts';
 
 const text = (el: Element | null | undefined) => (el?.textContent ?? '').replace(/ /g, ' ').trim();
@@ -26,13 +27,40 @@ const parseNumber = (value: string): number | null => {
     return match ? Number(match[1]) : null;
 };
 
+/**
+ * 구분자가 붙은 TeX 원문(`\(N\)`, `\[x\]`, `$N$`, `$$x$$`)을 나눕니다.
+ * BOJ의 MathJax 3은 원문을 `span.mjx-copytext`에 이 꼴로만 남깁니다.
+ */
+export const splitTexDelimiters = (text: string): { tex: string; display: boolean } | null => {
+    const value = text.trim();
+    const patterns: [RegExp, boolean][] = [
+        [/^\\\(([\s\S]*)\\\)$/, false],
+        [/^\\\[([\s\S]*)\\\]$/, true],
+        [/^\$\$([\s\S]*)\$\$$/, true],
+        [/^\$([\s\S]*)\$$/, false],
+    ];
+    for (const [pattern, display] of patterns) {
+        const match = pattern.exec(value);
+        if (match?.[1]?.trim()) return { tex: match[1].trim(), display };
+    }
+    return null;
+};
+
 /** MathJax가 이미 렌더링한 수식은 원래 TeX로 되돌립니다. (솔버에서 KaTeX로 다시 렌더링) */
 const restoreMath = (root: Element) => {
     for (const container of root.querySelectorAll('mjx-container')) {
         const tex = container.querySelector('mjx-assistive-mml, script[type^="math/tex"]');
-        const source = container.getAttribute('data-tex') ?? tex?.getAttribute('alttext');
-        const display = container.getAttribute('display') === 'true';
+        let source = container.getAttribute('data-tex') ?? tex?.getAttribute('alttext');
+        let display = container.getAttribute('display') === 'true';
+        if (!source) {
+            const copied = splitTexDelimiters(
+                container.querySelector('.mjx-copytext')?.textContent ?? ''
+            );
+            if (copied) ({ tex: source, display } = copied);
+        }
         if (source) container.replaceWith(display ? `$$${source}$$` : `$${source}$`);
+        // 원문이 없으면 수식을 읽을 수 있는 글자로라도 남깁니다.
+        else container.replaceWith(text(container.querySelector('mjx-assistive-mml')));
     }
     for (const script of root.querySelectorAll('script[type^="math/tex"]')) {
         const display = (script.getAttribute('type') ?? '').includes('mode=display');
@@ -80,6 +108,8 @@ export const parseProblemDocument = (id: string, doc: Document, origin: string):
     const time = text(infoCells[0]);
     const memory = text(infoCells[1]);
 
+    const isSpecialJudge = Boolean(doc.querySelector('.problem-label-spj'));
+
     return {
         id,
         title: text(doc.querySelector('#problem_title')) || `${id}번`,
@@ -87,7 +117,8 @@ export const parseProblemDocument = (id: string, doc: Document, origin: string):
         timeLimitSec: parseNumber(time),
         memoryLimitMB: parseNumber(memory),
         limitText: { time, memory },
-        isSpecialJudge: Boolean(doc.querySelector('.problem-label-spj')),
+        isSpecialJudge,
+        tolerance: isSpecialJudge ? findTolerance(body.textContent ?? '') : null,
         sections,
         samples,
     };

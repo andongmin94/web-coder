@@ -24,3 +24,66 @@ export const firstDiffLine = (actual: string, expected: string): number | null =
     }
     return null;
 };
+
+const isNumberToken = (token: string) => /^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i.test(token);
+
+/**
+ * 실수 오차를 허용하는 비교 (스페셜 저지 문제용). 토큰 수가 같고, 숫자 토큰은
+ * 절대 오차나 상대 오차가 tolerance 이하이며, 나머지 토큰은 글자가 같아야 합니다.
+ */
+export const isSameWithTolerance = (
+    actual: string,
+    expected: string,
+    tolerance: number
+): boolean => {
+    const a = actual.trim().split(/\s+/).filter(Boolean);
+    const e = expected.trim().split(/\s+/).filter(Boolean);
+    if (a.length !== e.length) return false;
+    // 부동소수점 반올림 여유
+    const limit = tolerance * (1 + 1e-6);
+    return a.every((token, i) => {
+        if (token === e[i]) return true;
+        if (!isNumberToken(token) || !isNumberToken(e[i])) return false;
+        const diff = Math.abs(Number(token) - Number(e[i]));
+        return diff <= limit || diff <= limit * Math.abs(Number(e[i]));
+    });
+};
+
+/** 기대 출력에 실수가 들어 있는지 (오차 비교를 쓸 만한지) */
+export const hasDecimalNumber = (text: string) =>
+    text
+        .trim()
+        .split(/\s+/)
+        .some((token) => isNumberToken(token) && /[.e]/i.test(token));
+
+/**
+ * 문제 본문에서 허용 오차를 찾습니다. "오차"가 들어간 문장의 10^{-9}, 10-9(위첨자), 1e-9 꼴.
+ * 찾지 못하면 null.
+ */
+export const findTolerance = (text: string): number | null => {
+    for (const sentence of text.split(/[.。\n]|다\s/)) {
+        if (!/오차|error/i.test(sentence)) continue;
+        const match =
+            /10\s*(?:\^\s*\{?\s*)?[-−–]\s*(\d{1,2})\s*\}?/.exec(sentence) ??
+            /\b1e-(\d{1,2})\b/i.exec(sentence);
+        if (match) return 10 ** -Number(match[1]);
+    }
+    return null;
+};
+
+/**
+ * 한 줄 안에서 서로 다른 구간. 앞뒤로 같은 부분을 빼고 남은 [start, endA) / [start, endB)입니다.
+ * (예: "1 2 3"과 "1 5 3" → start 2, endA 3, endB 3)
+ */
+export const differingRange = (a: string, b: string) => {
+    let start = 0;
+    const max = Math.min(a.length, b.length);
+    while (start < max && a[start] === b[start]) start++;
+    let endA = a.length;
+    let endB = b.length;
+    while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) {
+        endA--;
+        endB--;
+    }
+    return { start, endA, endB };
+};

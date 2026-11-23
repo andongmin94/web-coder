@@ -1,7 +1,14 @@
 // 컴파일된 C++ 프로그램(wasm32-wasip1) 실행
-import { CPP_DEEP_STACK, instrumentDeepStack, jspi } from './deep-stack.ts';
+import { CPP_DEEP_STACK, instrumentDeepStack } from './deep-stack.ts';
+import { jspi } from './jspi.ts';
 import { runWasi } from './wasi.ts';
-import type { ProcessOutput } from './types.ts';
+import { CPP_STACK_SIZE, type ProcessOutput } from './types.ts';
+
+/** 미리 잡아 둔 스택은 메모리 사용량에서 뺍니다. (BOJ도 쓰지 않은 스택은 세지 않음) */
+const withoutStack = <T extends ProcessOutput>(output: T): T =>
+    output.memoryBytes === undefined
+        ? output
+        : { ...output, memoryBytes: Math.max(0, output.memoryBytes - CPP_STACK_SIZE) };
 
 type Program = {
     module: WebAssembly.Module;
@@ -55,7 +62,7 @@ export const prepareCpp = async (artifact: Uint8Array) => {
                 stackOverflow,
                 ...output
             } = await runWasi(program.module, ['program'], {}, stdin);
-            if (!stackOverflow) return output;
+            if (!stackOverflow) return withoutStack(output);
             if (!jspi()) return { ...output, stderr: output.stderr + NO_JSPI_NOTE };
             first = output;
         }
@@ -73,6 +80,6 @@ export const prepareCpp = async (artifact: Uint8Array) => {
         } = await runWasi(deepModule, ['program'], {}, stdin, CPP_DEEP_STACK);
         const elapsedMs = performance.now() - started;
         if (stackOverflow) output.stderr += DEEP_OVERFLOW_NOTE;
-        return { ...output, elapsedMs };
+        return withoutStack({ ...output, elapsedMs });
     };
 };

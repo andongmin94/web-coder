@@ -114,6 +114,20 @@ export const judgeTimeLimitMs = (runtime: RuntimeKey, limitSec: number) => {
 };
 
 /**
+ * BOJ가 언어별로 늘려 주는 메모리 제한 (https://help.acmicpc.net/language/info).
+ * Python 3는 ×2+32MB, PyPy3는 ×2+128MB, node.js는 ×2. C++는 그대로입니다.
+ * (Java는 로컬에서 메모리를 잴 수 없어 그대로 둡니다)
+ */
+export const judgeMemoryLimitMB = (
+    lang: Pick<ResolvedLanguage, 'runtime' | 'label'>,
+    mb: number
+) => {
+    if (lang.runtime === 'python') return /pypy/i.test(lang.label) ? mb * 2 + 128 : mb * 2 + 32;
+    if (lang.runtime === 'javascript') return mb * 2;
+    return mb;
+};
+
+/**
  * 로컬 실행을 강제로 끊는 시간. 브라우저 실행은 채점 서버보다 느리므로 BOJ 제한보다 넉넉하게 잡습니다.
  * (C++ wasm은 네이티브의 1.5~2배, CPython wasm은 3~4배쯤 걸림)
  */

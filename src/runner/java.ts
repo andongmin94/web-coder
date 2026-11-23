@@ -1,13 +1,7 @@
 // 컴파일된 Java 프로그램(TeaVM wasm-gc) 실행
 import { ExitError, load } from '../../vendor/teavm/wasm-runtime.js';
-import {
-    JAVA_DEEP_STACK,
-    RESUME_EXPORT,
-    instrumentDeepStackWithMap,
-    isStackOverflow,
-    jspi,
-    type Jspi,
-} from './deep-stack.ts';
+import { JAVA_DEEP_STACK, RESUME_EXPORT, instrumentDeepStackWithMap } from './deep-stack.ts';
+import { isStackOverflow, jspi, type Jspi } from './jspi.ts';
 import { createJavaStackDecoder, type JavaFrame } from './java-debug.ts';
 import {
     EAGER_OUTPUT_CHARS,

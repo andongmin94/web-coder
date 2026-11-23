@@ -3,6 +3,7 @@
 //        bits/stdc++.h PCH가 없으면 별도 워커에서 만들어 IndexedDB에 저장
 // - C++ 결과물/Python: 실행 워커 풀에서 병렬 실행, 시간 초과 시 terminate 후 교체
 // - JavaScript: sandbox 페이지(eval 허용)의 워커에서 V8로 실행
+//               재귀가 깊어 스택이 넘치면 실행 워커의 QuickJS 깊은 재귀 모드로 다시 실행 (node-deep.ts)
 import type { ResolvedLanguage } from '../shared/languages.ts';
 import type {
     SandboxCheckResponse,
@@ -12,7 +13,14 @@ import type {
     SandboxRunResponse,
 } from '../sandbox/protocol.ts';
 import { usesBitsStdcxx, usesExceptions } from './cpp-header.ts';
-import type { CompilerRequest, CompilerResponse, RunResult, WorkerResponse } from './types.ts';
+import { jspi } from './jspi.ts';
+import type {
+    CompilerRequest,
+    CompilerResponse,
+    RunRequest,
+    RunResult,
+    WorkerResponse,
+} from './types.ts';
 
 const RUNNER_URL = 'runner-worker.js';
 const CPP_COMPILER_URL = 'clang/compiler-worker.js';
@@ -25,6 +33,14 @@ const PCH_WAIT_MS = 60_000;
 const SANDBOX_READY_TIMEOUT_MS = 10_000;
 
 const EMPTY_OUTPUT = { stdout: '', stderr: '', exitCode: -1, truncated: false };
+
+/** V8의 호출 스택 한계로 끝난 node.js 실행인지 (사용자가 잡지 않은 RangeError, js-worker가 표시) */
+const isJsStackOverflow = (result: RunResult) =>
+    result.status === 'runtime-error' && result.output.stackOverflow === true;
+
+const NODE_DEEP_NOTICE =
+    '재귀가 깊어 브라우저의 호출 스택이 넘쳤기 때문에 깊은 재귀 모드(QuickJS)로 다시 실행했습니다. ' +
+    '백준(node --stack-size=65536)에서는 통과하는 깊이입니다. 이 모드는 실제 node.js보다 느려서 실행 시간은 참고용입니다.';
 
 type Final<T> = Exclude<T, { type: 'started' } | { type: 'output' }>;
 /** 실행 중 받은 출력 (시간 초과 시 보여 줄 부분 출력) */
@@ -523,10 +539,32 @@ export class RunnerPool {
         stdin: string,
         timeoutMs: number
     ): Promise<RunResult> {
-        if (lang.runtime === 'javascript' || lang.runtime === 'java') {
+        if (lang.runtime === 'java') {
             return this.sandbox.run(lang.runtime, payload, stdin, timeoutMs);
         }
+        if (lang.runtime === 'javascript') {
+            // 깊은 재귀로 V8 스택이 넘친 코드는 QuickJS 깊은 재귀 모드로 다시 실행합니다. (node-deep.ts)
+            // 한 번 넘친 소스의 다음 테스트는 넘칠 첫 시도를 건너뜁니다.
+            if (!jspi() || this.deepJsSource !== payload.source) {
+                const first = await this.sandbox.run(lang.runtime, payload, stdin, timeoutMs);
+                if (!jspi() || !isJsStackOverflow(first)) return first;
+                this.deepJsSource = payload.source;
+            }
+            const deep = await this.runInWorker('javascript', payload, stdin, timeoutMs);
+            return deep.status === 'cancelled' ? deep : { ...deep, notice: NODE_DEEP_NOTICE };
+        }
+        return this.runInWorker(lang.runtime, payload, stdin, timeoutMs);
+    }
 
+    /** node.js 깊은 재귀 모드가 필요했던 소스 */
+    private deepJsSource: string | null = null;
+
+    private async runInWorker(
+        runtime: RunRequest['runtime'],
+        payload: { source: string; artifact?: Uint8Array },
+        stdin: string,
+        timeoutMs: number
+    ): Promise<RunResult> {
         const generation = this.generation;
         const worker = await this.acquire(generation);
         if (!worker) return { status: 'cancelled', output: EMPTY_OUTPUT, timeMs: 0 };
@@ -534,8 +572,8 @@ export class RunnerPool {
         const res = await worker.request(
             {
                 type: 'run',
-                runtime: lang.runtime,
-                source: lang.runtime === 'python' ? payload.source : undefined,
+                runtime,
+                source: runtime === 'cpp' ? undefined : payload.source,
                 artifact: payload.artifact,
                 stdin,
             },

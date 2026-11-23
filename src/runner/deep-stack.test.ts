@@ -5,8 +5,8 @@ import {
     RESUME_EXPORT,
     instrumentDeepStack,
     instrumentDeepStackWithMap,
-    jspi,
 } from './deep-stack.ts';
+import { jspi } from './jspi.ts';
 
 const name = (text: string) => [text.length, ...new TextEncoder().encode(text)];
 const section = (id: number, payload: number[]) => [id, payload.length, ...payload];

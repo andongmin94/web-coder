@@ -1,7 +1,8 @@
 // WASI 바이너리 실행 공통 로직 (clang, wasm-ld, python, 사용자 프로그램).
 import { WASI, type WASIFS } from '@runno/wasi';
 import { parseTar } from './tar.ts';
-import { createDeepRunner, isStackOverflow, jspi, type DeepStackOptions } from './deep-stack.ts';
+import { createDeepRunner, type DeepStackOptions } from './deep-stack.ts';
+import { isStackOverflow, jspi } from './jspi.ts';
 import { OutputCollector, OutputLimitError } from './output.ts';
 import type { ProcessOutput } from './types.ts';
 
@@ -248,6 +249,7 @@ export const runWasi = async (
         stderr: out.stderr,
         exitCode,
         truncated: out.truncated,
+        memoryBytes: memoryOf().byteLength,
         fs: resultFS,
         stackOverflow,
     };

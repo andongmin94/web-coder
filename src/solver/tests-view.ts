@@ -1,5 +1,11 @@
 // 테스트 목록: 예제별로 접히는 행 + 실패 시 줄 단위 비교
-import { isSameOutput, normalizeOutput } from '../judge/judge.ts';
+import {
+    differingRange,
+    hasDecimalNumber,
+    isSameOutput,
+    isSameWithTolerance,
+    normalizeOutput,
+} from '../judge/judge.ts';
 import type { RunResult } from '../runner/types.ts';
 import { h } from './dom.ts';
 
@@ -20,63 +26,107 @@ export type TestState =
 
 export type Verdict = 'pass' | 'fail' | 'output' | 'error' | 'timeout' | 'olimit' | 'cancelled';
 
-export const verdictOf = (test: TestCase, result: RunResult, specialJudge: boolean): Verdict => {
+/** 판정에 필요한 문제 정보 */
+export type JudgeContext = {
+    specialJudge: boolean;
+    /** 스페셜 저지 문제의 실수 허용 오차 (모르면 null) */
+    tolerance: number | null;
+    /** 메모리 제한 (MB, 모르면 null) */
+    memoryLimitMB: number | null;
+};
+
+/** 스페셜 저지라도 허용 오차를 알고 기대 출력이 실수면 오차 안에서 비교할 수 있습니다. */
+const usesTolerance = (test: TestCase, judge: JudgeContext) =>
+    judge.specialJudge && judge.tolerance !== null && hasDecimalNumber(test.expected);
+
+export const verdictOf = (test: TestCase, result: RunResult, judge: JudgeContext): Verdict => {
     if (result.status === 'cancelled') return 'cancelled';
     if (result.status === 'timeout') return 'timeout';
     if (result.status === 'internal-error' || result.status === 'runtime-error') return 'error';
     if (result.output.truncated) return 'olimit';
-    if (specialJudge || !test.expected.trim()) return 'output';
+    if (!test.expected.trim()) return 'output';
+    if (usesTolerance(test, judge))
+        return isSameWithTolerance(result.output.stdout, test.expected, judge.tolerance!)
+            ? 'pass'
+            : 'fail';
+    if (judge.specialJudge) return 'output';
     return isSameOutput(result.output.stdout, test.expected) ? 'pass' : 'fail';
 };
 
 export const isBadVerdict = (v: Verdict) =>
     v === 'fail' || v === 'error' || v === 'timeout' || v === 'olimit';
 
-const VERDICT: Record<Verdict, { text: string; icon: string }> = {
-    pass: { text: '통과', icon: '✓' },
-    fail: { text: '틀렸습니다', icon: '✕' },
-    output: { text: '실행됨', icon: '•' },
-    error: { text: '런타임 에러', icon: '!' },
-    timeout: { text: '시간 초과', icon: '⏱' },
-    olimit: { text: '출력 초과', icon: '!' },
-    cancelled: { text: '중단됨', icon: '–' },
+/** 판정 글씨 (색은 백준 채점 결과 색, solver.css의 .verdict-*) */
+const VERDICT_TEXT: Record<Verdict, string> = {
+    pass: '통과',
+    fail: '틀렸습니다',
+    output: '실행됨',
+    error: '런타임 에러',
+    timeout: '시간 초과',
+    olimit: '출력 초과',
+    cancelled: '중단됨',
 };
 
 type Callbacks = {
     onToggle: (id: string) => void;
     onChangeCustom: (id: string, patch: { input?: string; expected?: string }) => void;
     onDeleteCustom: (id: string) => void;
+    /** 예제를 고칠 수 있는 내 테스트로 복사 */
+    onDuplicate: (test: TestCase) => void;
+};
+
+/** 접힌 카드에 보여 줄 입력 첫 줄 (여러 줄이면 줄 수도) */
+const inputPreview = (input: string) => {
+    const lines = input.replace(/\n+$/, '').split('\n');
+    const first = lines[0].length > 40 ? `${lines[0].slice(0, 40)}…` : lines[0];
+    if (!first.trim()) return '';
+    return lines.length > 1 ? `${first}  (+${lines.length - 1}줄)` : first;
 };
 
 const MAX_LINES = 400;
 
-const plainBlock = (label: string | Node[], text: string, extraClass = '') =>
-    h('div', { class: `io ${extraClass}` }, [
-        h('div', { class: 'io-label' }, label),
+const MB = 1024 * 1024;
+const formatMemory = (bytes: number) =>
+    bytes >= 100 * MB ? `${Math.round(bytes / MB)}MB` : `${(bytes / MB).toFixed(1)}MB`;
+
+const plainBlock = (label: string | Node[], text: string) =>
+    h('div', { class: 'io' }, [
+        h('div', { class: 'io-label' }, [h('span', { class: 'io-title' }, label)]),
         h('pre', {}, text.length ? text.replace(/\n$/, '') : ' '),
     ]);
 
-/** 기대/실제 출력을 줄 단위로 비교해 다른 줄을 강조합니다. */
+/** 실제 출력에서 기대 출력과 다른 줄을 빨간 글씨로, 그 안에서 다른 글자는 밑줄로 보여 줍니다. */
 const diffBlocks = (expected: string, actual: string) => {
     const e = normalizeOutput(expected).split('\n');
     const a = normalizeOutput(actual).split('\n');
-    const rows = Math.max(e.length, a.length);
-    let firstDiff = -1;
-    for (let i = 0; i < rows; i++) {
-        if (e[i] !== a[i]) {
-            firstDiff = i;
-            break;
-        }
-    }
-    const render = (lines: string[], other: string[], badClass: string) => {
+    /** 다른 줄은 그 안에서 실제로 다른 글자만 한 번 더 강조합니다. (공백 하나 차이도 보이게) */
+    const lineContent = (line: string, other: string | undefined): (Node | string)[] => {
+        if (other === undefined || line === other) return [line || ' '];
+        const { start, endA, endB } = differingRange(line, other);
+        // 줄 전체가 다르면 빨간 글씨만으로 충분합니다.
+        if (start === 0 && endA === line.length && endB === other.length) return [line || ' '];
+        const mid = line.slice(start, endA);
+        return [
+            line.slice(0, start),
+            mid
+                ? h('mark', { class: 'diff-char' }, mid.replace(/ /g, '·'))
+                : // 이쪽에는 없고 상대 쪽에만 있는 글자: 자리만 표시
+                  endB > start
+                  ? h('mark', { class: 'diff-gap', title: '이 자리에 글자가 없습니다' }, '')
+                  : '',
+            line.slice(endA),
+        ].filter((part) => part !== '');
+    };
+    const render = (lines: string[], other: string[] | null) => {
         const pre = h('pre');
         const shown = Math.min(lines.length, MAX_LINES);
         for (let i = 0; i < shown; i++) {
+            const bad = other !== null && lines[i] !== other[i];
             pre.append(
                 h(
                     'span',
-                    { class: `diff-line ${lines[i] !== other[i] ? badClass : ''}` },
-                    lines[i] || ' '
+                    { class: `diff-line ${bad ? 'diff-bad' : ''}` },
+                    bad ? lineContent(lines[i], other[i]) : lines[i] || ' '
                 )
             );
         }
@@ -84,16 +134,14 @@ const diffBlocks = (expected: string, actual: string) => {
             pre.append(h('span', { class: 'diff-line' }, `… ${lines.length - shown}줄 더`));
         return pre;
     };
-    const note =
-        firstDiff >= 0 ? h('span', { class: 'note' }, `${firstDiff + 1}번째 줄부터 다름`) : null;
     return [
         h('div', { class: 'io' }, [
-            h('div', { class: 'io-label' }, ['실제 출력', note]),
-            render(a, e, 'diff-bad'),
+            h('div', { class: 'io-label' }, [h('span', { class: 'io-title' }, '실제 출력')]),
+            render(a, e),
         ]),
         h('div', { class: 'io' }, [
-            h('div', { class: 'io-label' }, '기대 출력'),
-            render(e, a, 'diff-miss'),
+            h('div', { class: 'io-label' }, [h('span', { class: 'io-title' }, '기대 출력')]),
+            render(e, null),
         ]),
     ];
 };
@@ -107,29 +155,35 @@ const editable = (
     const area = h('textarea', { class: 'io-edit', spellcheck: 'false', placeholder, rows: 3 });
     area.value = value;
     area.addEventListener('input', () => onInput(area.value));
-    return h('div', { class: 'io' }, [h('div', { class: 'io-label' }, label), area]);
+    return h('div', { class: 'io' }, [
+        h('div', { class: 'io-label' }, [h('span', { class: 'io-title' }, label)]),
+        area,
+    ]);
 };
 
 export const renderTest = (
     test: TestCase,
     state: TestState,
     open: boolean,
-    specialJudge: boolean,
+    judge: JudgeContext,
     /** 지금 언어에 BOJ가 적용하는 시간 제한 (모르면 null) */
     judgeLimitMs: number | null,
     callbacks: Callbacks
 ): HTMLElement => {
-    let icon: HTMLElement;
+    // 실행 중일 때만 제목 앞에 스피너를 둡니다.
+    let spinner: HTMLElement | null = null;
     let verdictText: HTMLElement;
     let time: string | null = null;
     let verdict: Verdict | null = null;
     // 끝까지 돌았지만 BOJ 제한보다 오래 걸린 경우 (로컬은 채점 서버보다 느려서 판정은 바꾸지 않고 알리기만 함)
     let slow = false;
+    // 메모리도 BOJ 제한을 넘었으면 알리기만 합니다. (로컬 측정은 wasm 선형 메모리 기준 근삿값)
+    let memory: number | null = null;
+    let heavy = false;
 
     switch (state.phase) {
         case 'idle':
         case 'skipped':
-            icon = h('span', { class: 'test-icon' }, '');
             verdictText = h(
                 'span',
                 { class: 'test-verdict verdict-muted' },
@@ -137,24 +191,27 @@ export const renderTest = (
             );
             break;
         case 'queued':
-            icon = h('span', { class: 'test-icon' }, '');
             verdictText = h('span', { class: 'test-verdict verdict-muted' }, '대기');
             break;
         case 'running':
-            icon = h('span', { class: 'spinner', 'aria-hidden': 'true' });
+            spinner = h('span', { class: 'spinner', 'aria-hidden': 'true' });
             verdictText = h('span', { class: 'test-verdict verdict-muted' }, '실행 중');
             break;
         case 'done':
-            verdict = verdictOf(test, state.result, specialJudge);
-            icon = h('span', { class: `test-icon icon-${verdict}` }, VERDICT[verdict].icon);
+            verdict = verdictOf(test, state.result, judge);
             verdictText = h(
                 'span',
                 { class: `test-verdict verdict-${verdict}` },
-                VERDICT[verdict].text
+                VERDICT_TEXT[verdict]
             );
             if (verdict !== 'timeout' && verdict !== 'cancelled') {
                 time = `${Math.round(state.result.timeMs)}ms`;
                 slow = judgeLimitMs !== null && state.result.timeMs > judgeLimitMs;
+                memory = state.result.output.memoryBytes ?? null;
+                heavy =
+                    memory !== null &&
+                    judge.memoryLimitMB !== null &&
+                    memory > judge.memoryLimitMB * MB;
             }
             break;
     }
@@ -168,10 +225,15 @@ export const renderTest = (
             onclick: () => callbacks.onToggle(test.id),
         },
         [
-            icon,
+            spinner ?? '',
             h('span', { class: 'test-name' }, test.label),
             verdictText,
-            h('span', { class: `test-time ${slow ? 'is-slow' : ''}` }, time ?? ''),
+            // 접혀 있을 때 입력 첫 줄을 미리 보여 줍니다.
+            h('span', { class: 'test-preview' }, open ? '' : inputPreview(test.input)),
+            h('span', { class: `test-time ${slow || heavy ? 'is-slow' : ''}` }, [
+                time ?? '',
+                memory !== null && time ? ` · ${formatMemory(memory)}` : '',
+            ]),
             h('span', { class: 'chevron', 'aria-hidden': 'true' }, '›'),
         ]
     );
@@ -196,6 +258,19 @@ export const renderTest = (
     } else {
         body.append(plainBlock('입력', test.input));
     }
+    const duplicateButton =
+        test.kind === 'sample'
+            ? h(
+                  'button',
+                  {
+                      class: 'btn btn-ghost btn-sm',
+                      type: 'button',
+                      title: '이 예제의 입력과 기대 출력을 고칠 수 있는 내 테스트로 복사합니다',
+                      onclick: () => callbacks.onDuplicate(test),
+                  },
+                  '테스트 복제'
+              )
+            : null;
 
     if (state.phase === 'done') {
         const { stdout, stderr } = state.result.output;
@@ -208,7 +283,7 @@ export const renderTest = (
                 plainBlock(verdict === 'timeout' ? '실제 출력 (중단 전까지)' : '실제 출력', stdout)
             );
         }
-        if (stderr.trim()) body.append(plainBlock('표준 에러', stderr, 'io-stderr'));
+        if (stderr.trim()) body.append(plainBlock('표준 에러', stderr));
         if (verdict === 'error' && state.result.message)
             body.append(h('p', { class: 'io-note' }, state.result.message));
         if (verdict === 'error' && !stderr.trim() && !state.result.message) {
@@ -233,6 +308,26 @@ export const renderTest = (
                 )
             );
         }
+        if (state.result.notice) body.append(h('p', { class: 'io-note' }, state.result.notice));
+        if (heavy && memory !== null && judge.memoryLimitMB !== null) {
+            body.append(
+                h(
+                    'p',
+                    { class: 'io-note io-note-warn' },
+                    `메모리를 약 ${formatMemory(memory)} 썼습니다. 이 문제의 메모리 제한은 ` +
+                        `${judge.memoryLimitMB}MB라서 백준에서 메모리 초과가 날 수 있습니다.`
+                )
+            );
+        }
+        if ((verdict === 'pass' || verdict === 'fail') && usesTolerance(test, judge)) {
+            body.append(
+                h(
+                    'p',
+                    { class: 'io-note' },
+                    `스페셜 저지 문제라서 실수는 오차 ${judge.tolerance!.toExponential(0)} 이내로 비교했습니다.`
+                )
+            );
+        }
         if (state.result.output.truncated)
             body.append(h('p', { class: 'io-note' }, '출력이 1MB를 넘어 잘랐습니다.'));
     } else if (test.kind === 'sample') {
@@ -254,6 +349,7 @@ export const renderTest = (
             ])
         );
     }
+    if (duplicateButton) body.append(h('div', {}, [duplicateButton]));
     card.append(body);
     return card;
 };

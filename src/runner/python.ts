@@ -1,5 +1,6 @@
 // Python 3: CPython 3.13 WASI 빌드 (tools/python/README.md)
-import { PYTHON_DEEP_STACK, instrumentDeepStack, jspi } from './deep-stack.ts';
+import { WASI_DEEP_STACK, instrumentDeepStack } from './deep-stack.ts';
+import { jspi } from './jspi.ts';
 import { loadBaseFS, loadModule, runWasi, textFile } from './wasi.ts';
 import type { ProcessOutput } from './types.ts';
 
@@ -25,7 +26,7 @@ const loadDeepModule = () => {
         const response = await fetch(new URL(`/${PYTHON}`, self.location.origin));
         const patched = instrumentDeepStack(
             new Uint8Array(await response.arrayBuffer()),
-            PYTHON_DEEP_STACK
+            WASI_DEEP_STACK
         );
         return patched ? WebAssembly.compile(patched as Uint8Array<ArrayBuffer>) : null;
     })();
@@ -66,7 +67,7 @@ export const runPython = async (
         fs: _deepFs,
         stackOverflow: again,
         ...deepOutput
-    } = await runWasi(deep, ARGS, files(), stdin, PYTHON_DEEP_STACK);
+    } = await runWasi(deep, ARGS, files(), stdin, WASI_DEEP_STACK);
     const elapsedMs = performance.now() - started;
     if (again) deepOutput.stderr += DEEP_OVERFLOW_NOTE;
     return { ...deepOutput, elapsedMs };
