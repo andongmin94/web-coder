@@ -10,6 +10,8 @@
 #    - java.util.Scanner / InputMismatchException 추가 (TeaVM에 없음)
 #    - Thread(ThreadGroup, Runnable, String, long) 생성자 추가 (patch-thread.mjs)
 #    - String.format/printf의 실수 형식(%f, %e, %g)을 OpenJDK와 같게 (TFormatter)
+#    - HashMap/HashSet 순회 순서, Random 수열, float/double 출력과 읽기, split, StreamTokenizer 등을
+#      BOJ의 Java 11과 같게 (patch/org/teavm/classlib, README 참고)
 #    - Java 8/11/15용으로 그 버전의 API만 남긴 javac SDK (release-sdk.mjs)
 # 3) public/java/에 복사
 set -euo pipefail
@@ -48,6 +50,9 @@ unzip -q -o "$SRC/compiler/build/distributions/dist.zip" -d "$DIST"
 # ── 패치 ─────────────────────────────────────────────────────────────
 CL=$(find "$GRADLE_USER_HOME/caches" -name "teavm-classlib-$TEAVM_VERSION.jar" | head -1)
 IO=$(find "$GRADLE_USER_HOME/caches" -name "teavm-interop-$TEAVM_VERSION.jar" | head -1)
+# @Rename, @JSBody 등 클래스 라이브러리 소스가 쓰는 애너테이션
+CORE=$(find "$GRADLE_USER_HOME/caches" -name "teavm-core-$TEAVM_VERSION.jar" | head -1)
+JSO=$(find "$GRADLE_USER_HOME/caches" -name "teavm-jso-$TEAVM_VERSION.jar" | head -1)
 GEN="$WORK_DIR/patch-gen"
 OUT="$WORK_DIR/patch-out"
 rm -rf "$GEN" "$OUT"
@@ -61,10 +66,13 @@ gen InputMismatchException org.teavm.classlib.java.util TScanner TInputMismatchE
 gen Scanner java.util Scanner InputMismatchException "$GEN/sdk/java/util/Scanner.java"
 gen InputMismatchException java.util Scanner InputMismatchException "$GEN/sdk/java/util/InputMismatchException.java"
 
-# TeaVM 런타임용: java.* 참조는 TeaVM이 T* 클래스로 바꿔 연결합니다. (원본과 같은 Java 17 바이트코드)
-"$(exe javac)" --release 17 -nowarn -cp "$(winpath "$CL")$SEP$(winpath "$IO")" -d "$(winpath "$OUT/rt")" \
-    "$(winpath "$HERE/patch/org/teavm/classlib/java/lang/TConsoleInputStream.java")" \
-    "$(winpath "$HERE/patch/org/teavm/classlib/java/util/TFormatter.java")" \
+# TeaVM 런타임용: patch/org/teavm/classlib 아래의 모든 소스와 Scanner. java.* 참조는 TeaVM이 T* 클래스로 바꿔 연결합니다.
+# (원본과 같은 Java 17 바이트코드)
+RT_SOURCES=()
+while IFS= read -r f; do RT_SOURCES+=("$(winpath "$HERE/patch/$f")"); done < <(cd "$HERE/patch" && find org -name '*.java' | sort)
+"$(exe javac)" --release 17 -nowarn -encoding UTF-8 \
+    -cp "$(winpath "$CL")$SEP$(winpath "$IO")$SEP$(winpath "$CORE")$SEP$(winpath "$JSO")" -d "$(winpath "$OUT/rt")" \
+    "${RT_SOURCES[@]}" \
     "$(winpath "$GEN/rt/org/teavm/classlib/java/util/TScanner.java")" \
     "$(winpath "$GEN/rt/org/teavm/classlib/java/util/TInputMismatchException.java")"
 
@@ -73,12 +81,10 @@ gen InputMismatchException java.util Scanner InputMismatchException "$GEN/sdk/ja
     "$(winpath "$GEN/sdk/java/util/Scanner.java")" \
     "$(winpath "$GEN/sdk/java/util/InputMismatchException.java")"
 
-node "$HERE/classlib-archive.mjs" put "$DIST/runtime-classlib-teavm.bin" "$ROOT/public/java/runtime-classlib.bin" \
-    "org/teavm/classlib/java/lang/TConsoleInputStream.class=$OUT/rt/org/teavm/classlib/java/lang/TConsoleInputStream.class" \
-    "org/teavm/classlib/java/util/TFormatter.class=$OUT/rt/org/teavm/classlib/java/util/TFormatter.class" \
-    "org/teavm/classlib/java/util/TFormatter\$FormatWriter.class=$OUT/rt/org/teavm/classlib/java/util/TFormatter\$FormatWriter.class" \
-    "org/teavm/classlib/java/util/TScanner.class=$OUT/rt/org/teavm/classlib/java/util/TScanner.class" \
-    "org/teavm/classlib/java/util/TInputMismatchException.class=$OUT/rt/org/teavm/classlib/java/util/TInputMismatchException.class"
+# 컴파일된 클래스(안쪽 클래스 포함)를 모두 교체합니다.
+RT_CLASSES=()
+while IFS= read -r f; do RT_CLASSES+=("$f=$OUT/rt/$f"); done < <(cd "$OUT/rt" && find org -name '*.class' | sort)
+node "$HERE/classlib-archive.mjs" put "$DIST/runtime-classlib-teavm.bin" "$ROOT/public/java/runtime-classlib.bin" "${RT_CLASSES[@]}"
 node "$HERE/classlib-archive.mjs" put "$DIST/compile-classlib-teavm.bin" "$ROOT/public/java/compile-classlib.bin" \
     "java/util/Scanner.class=$OUT/sdk/java/util/Scanner.class" \
     "java/util/InputMismatchException.class=$OUT/sdk/java/util/InputMismatchException.class"

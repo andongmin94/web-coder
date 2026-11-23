@@ -1,0 +1,993 @@
+/*
+ * 웹 코더 패치: TeaVM 0.17.0-dev-7의 원본에서 float/double 출력을 BOJ의 Java 11과 같게 고쳤습니다.
+ * (tools/java/README.md 참고) 원본 저작권과 라이선스는 아래와 같습니다.
+ */
+/*
+ *  Copyright 2013 Alexey Andreev.
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ */
+package org.teavm.classlib.java.lang;
+
+import java.util.Arrays;
+import org.teavm.classlib.impl.text.DoubleAnalyzer;
+import org.teavm.classlib.impl.text.DoubleSynthesizer;
+import org.teavm.classlib.impl.text.FloatAnalyzer;
+import org.teavm.classlib.java.io.TSerializable;
+import org.teavm.classlib.java.util.TArrays;
+
+class TAbstractStringBuilder implements TSerializable, TCharSequence {
+    static class Constants {
+        static final DoubleAnalyzer.Result doubleAnalysisResult = new DoubleAnalyzer.Result();
+        static final FloatAnalyzer.Result floatAnalysisResult = new FloatAnalyzer.Result();
+    }
+
+    char[] buffer;
+    private int length;
+
+    public TAbstractStringBuilder() {
+        this(16);
+    }
+
+    public TAbstractStringBuilder(int capacity) {
+        buffer = new char[capacity];
+    }
+
+    public TAbstractStringBuilder(String value) {
+        this((CharSequence) value);
+    }
+
+    public TAbstractStringBuilder(CharSequence value) {
+        buffer = new char[value.length()];
+        for (int i = 0; i < buffer.length; ++i) {
+            buffer[i] = value.charAt(i);
+        }
+        length = value.length();
+    }
+
+    public TAbstractStringBuilder append(Object obj) {
+        return append(String.valueOf(obj));
+    }
+
+    protected TAbstractStringBuilder append(String string) {
+        return insert(length, string);
+    }
+
+    protected TAbstractStringBuilder insert(int index, String string) {
+        if (index < 0 || index > length) {
+            throw new TStringIndexOutOfBoundsException();
+        }
+        if (string == null) {
+            string = "null";
+        } else if (string.isEmpty()) {
+            return this;
+        }
+        ensureCapacity(length + string.length());
+        for (int i = length - 1; i >= index; --i) {
+            buffer[i + string.length()] = buffer[i];
+        }
+        length += string.length();
+        int j = index;
+        for (int i = 0; i < string.length(); ++i) {
+            buffer[j++] = string.charAt(i);
+        }
+        return this;
+    }
+
+    protected TAbstractStringBuilder append(int value) {
+        return append(value, 10);
+    }
+
+    protected TAbstractStringBuilder insert(int index, int value) {
+        return insert(index, value, 10);
+    }
+
+    TAbstractStringBuilder append(int value, int radix) {
+        return insert(length, value, radix);
+    }
+
+    TAbstractStringBuilder insert(int target, int value, int radix) {
+        boolean positive = true;
+        if (value < 0) {
+            positive = false;
+            value = -value;
+        }
+        if (Integer.compareUnsigned(value, radix) < 0) {
+            if (!positive) {
+                insertSpace(target, target + 2);
+                buffer[target++] = '-';
+            } else {
+                insertSpace(target, target + 1);
+            }
+            buffer[target++] = Character.forDigit(value, radix);
+        } else {
+            int pos = 1;
+            int sz = 1;
+            var posLimit = Integer.divideUnsigned(-1, radix);
+            while (Integer.compareUnsigned(pos * radix, value) <= 0) {
+                pos *= radix;
+                ++sz;
+                if (Integer.compareUnsigned(pos, posLimit) > 0) {
+                    break;
+                }
+            }
+            if (!positive) {
+                ++sz;
+            }
+            insertSpace(target, target + sz);
+            if (!positive) {
+                buffer[target++] = '-';
+            }
+            while (pos != 0) {
+                buffer[target++] = Character.forDigit(Integer.divideUnsigned(value, pos), radix);
+                value = Integer.remainderUnsigned(value, pos);
+                pos = Integer.divideUnsigned(pos, radix);
+            }
+        }
+        return this;
+    }
+
+    protected TAbstractStringBuilder append(long value) {
+        return insert(length, value);
+    }
+
+    protected TAbstractStringBuilder insert(int target, long value) {
+        return insert(target, value, 10);
+    }
+
+    protected TAbstractStringBuilder insert(int target, long value, int radix) {
+        boolean positive = true;
+        if (value < 0) {
+            positive = false;
+            value = -value;
+        }
+        if (Long.compareUnsigned(value, radix) < 0) {
+            if (!positive) {
+                insertSpace(target, target + 2);
+                buffer[target++] = '-';
+            } else {
+                insertSpace(target, target + 1);
+            }
+            buffer[target++] = Character.forDigit((int) value, radix);
+        } else {
+            int sz = 1;
+            long pos = 1;
+            var posLimit = Long.divideUnsigned(-1, radix);
+            while (Long.compareUnsigned(pos * radix, value) <= 0) {
+                pos *= radix;
+                ++sz;
+                if (Long.compareUnsigned(pos, posLimit) > 0) {
+                    break;
+                }
+            }
+            if (!positive) {
+                ++sz;
+            }
+            insertSpace(target, target + sz);
+            if (!positive) {
+                buffer[target++] = '-';
+            }
+            while (pos != 0) {
+                buffer[target++] = TCharacter.forDigit((int) Long.divideUnsigned(value, pos), radix);
+                value = Long.remainderUnsigned(value, pos);
+                pos = Long.divideUnsigned(pos, radix);
+            }
+        }
+        return this;
+    }
+
+
+    protected TAbstractStringBuilder append(float value) {
+        return insert(length, value);
+    }
+
+    protected TAbstractStringBuilder insert(int target, float value) {
+        if (value == 0) {
+            if (1 / value == Float.POSITIVE_INFINITY) {
+                insertSpace(target, target + 3);
+                buffer[target++] = '0';
+                buffer[target++] = '.';
+                buffer[target++] = '0';
+                return this;
+            } else {
+                insertSpace(target, target + 4);
+                buffer[target++] = '-';
+                buffer[target++] = '0';
+                buffer[target++] = '.';
+                buffer[target++] = '0';
+                return this;
+            }
+        } else if (Float.isNaN(value)) {
+            insertSpace(target, target + 3);
+            buffer[target++] = 'N';
+            buffer[target++] = 'a';
+            buffer[target++] = 'N';
+            return this;
+        } else if (Float.isInfinite(value)) {
+            if (value > 0) {
+                insertSpace(target, target + 8);
+            } else {
+                insertSpace(target, target + 9);
+                buffer[target++] = '-';
+            }
+            buffer[target++] = 'I';
+            buffer[target++] = 'n';
+            buffer[target++] = 'f';
+            buffer[target++] = 'i';
+            buffer[target++] = 'n';
+            buffer[target++] = 'i';
+            buffer[target++] = 't';
+            buffer[target++] = 'y';
+            return this;
+        }
+
+        var number = Constants.floatAnalysisResult;
+        analyzeFloat(value, number);
+        int mantissa = number.mantissa;
+        int exp = number.exponent;
+        boolean negative = number.sign;
+        int intPart = 1;
+        int sz = 1; // Decimal point always included
+        if (negative) {
+            ++sz; // including '-' sign of mantissa
+        }
+
+        // Remove trailing zeros
+        int digits = FloatAnalyzer.PRECISION;
+        int zeros = trailingDecimalZeros(mantissa);
+        if (zeros > 0) {
+            digits -= zeros;
+        }
+        var leadingZeros = 0;
+        var leadingZero = false;
+
+        // Handle special case of exponent close to 0
+        if (exp < 7 && exp >= -3) {
+            if (exp >= 0) {
+                intPart = exp + 1;
+                digits = Math.max(digits, intPart + 1);
+                exp = 0;
+            } else {
+                intPart = 0;
+                leadingZeros = -exp - 1;
+                leadingZero = true;
+                sz++;
+                exp = 0;
+            }
+        }
+
+        // Extend buffer to store exponent
+        if (exp != 0) {
+            sz += 2;
+            if (exp <= -10 || exp >= 10) {
+                ++sz;
+            }
+            if (exp < 0) {
+                ++sz;
+            }
+        }
+
+        if (exp != 0 && digits == intPart) {
+            digits++;
+        }
+        sz += digits + leadingZeros;
+
+        // Print mantissa
+        insertSpace(target, target + sz);
+        if (negative) {
+            buffer[target++] = '-';
+        }
+        int pos = FloatAnalyzer.MAX_POS;
+        if (leadingZero) {
+            buffer[target++] = '0';
+            buffer[target++] = '.';
+            while (leadingZeros-- > 0) {
+                buffer[target++] = '0';
+            }
+        }
+        for (int i = 0; i < digits; ++i) {
+            int intDigit;
+            if (pos > 0) {
+                intDigit = mantissa / pos;
+                mantissa %= pos;
+            } else {
+                intDigit = 0;
+            }
+            buffer[target++] = (char) ('0' + intDigit);
+            if (--intPart == 0) {
+                buffer[target++] = '.';
+            }
+            pos /= 10;
+        }
+
+        // Print exponent
+        if (exp != 0) {
+            buffer[target++] = 'E';
+            if (exp < 0) {
+                exp = -exp;
+                buffer[target++] = '-';
+            }
+            if (exp >= 10) {
+                buffer[target++] = (char) ('0' + exp / 10);
+            }
+            buffer[target++] = (char) ('0' + exp % 10);
+        }
+        return this;
+    }
+
+    // ── 웹 코더 패치: float/double 출력을 BOJ의 Java 11과 같게 ──
+    // 원본 FloatAnalyzer는 float 자릿수를 3분의 2쯤 틀리게 골랐고(16777216f → 1.6777218E7, 다른 float),
+    // DoubleAnalyzer는 Double.MIN_NORMAL 같은 값에서 엉뚱한 수(4.49423283715579E307)를 냈습니다.
+    // 1) Java 11은 long에 들어가는 정수면 정수의 자릿수를 그대로 쓰고, 2진으로 보아 의미 없는 끝자리 몇 개만 반올림해 버립니다.
+    //    (456131744f → 4.56131744E8. Java 19부터는 가장 짧은 표기)
+    // 2) 그 밖의 double은 원본 자릿수가 Java 11과 거의 같으므로 쓰되, 다시 읽어 같은 값이 아니면 정확히 다시 구합니다.
+    // 3) float과 아주 작은 double(비정규수)은 다시 읽으면 같은 값이 되는 가장 짧은 자릿수를 씁니다.
+    //    Java처럼 한 자리로 되면 두 자리 중 가장 가까운 것(Double.MIN_VALUE → 4.9E-324), 딱 중간이면 짝수 쪽입니다.
+    private static final long[] POW10 = {
+        1L, 10L, 100L, 1000L, 10000L, 100000L, 1000000L, 10000000L, 100000000L, 1000000000L,
+        10000000000L, 100000000000L, 1000000000000L, 10000000000000L, 100000000000000L,
+        1000000000000000L, 10000000000000000L, 100000000000000000L, 1000000000000000000L
+    };
+    private static long foundDigits;
+    private static int foundExponent;
+
+    /** 첫 자리가 10^(precision-1) 자리인 정수 digits를 첫 자리의 10진 지수 exp와 함께 double로 읽습니다. */
+    private static double readBack(long digits, int precision, int exp) {
+        // DoubleSynthesizer는 첫 자리가 10^18 자리인 19자리 가수를 받습니다.
+        return DoubleSynthesizer.synthesizeDouble(digits * POW10[19 - precision], exp, false);
+    }
+
+    /** 비정규수: DoubleSynthesizer가 정확하지 않아 BigDecimal로 정확히 확인합니다. (드묾) */
+    private static boolean matchesSubnormal(long digits, int p, int exp, double target) {
+        java.math.BigDecimal d = new java.math.BigDecimal(java.math.BigInteger.valueOf(digits), -(exp - p + 1));
+        java.math.BigInteger k = d.multiply(new java.math.BigDecimal(java.math.BigInteger.ONE.shiftLeft(1074)))
+                .setScale(0, java.math.RoundingMode.HALF_EVEN).toBigInteger();
+        return k.longValue() == Double.doubleToLongBits(target);
+    }
+
+    private static boolean matches(long digits, int p, int exp, double target, boolean asFloat) {
+        if (!asFloat && target < Double.MIN_NORMAL) {
+            return matchesSubnormal(digits, p, exp, target);
+        }
+        double d = readBack(digits, p, exp);
+        return asFloat ? (float) d == (float) target : d == target;
+    }
+
+    /** 18자리 m18을 p자리로 반올림 (딱 중간이면 짝수) */
+    private static long roundTo(long m18, int p) {
+        long unit = POW10[18 - p];
+        long q = m18 / unit;
+        long rest2 = (m18 % unit) * 2;
+        if (rest2 > unit || (rest2 == unit && (q & 1) == 1)) {
+            q++;
+        }
+        return q;
+    }
+
+    /** m18(첫 자리 10^17), exp에서 다시 읽으면 target이 되는 가장 짧은 자릿수 → foundDigits(18자리 기준), foundExponent */
+    private static boolean shortest(long m18, int exp, double target, boolean asFloat) {
+        int maxDigits = asFloat ? 9 : 17;
+        for (int p = 1; p <= maxDigits; p++) {
+            long q = roundTo(m18, p);
+            int e = exp;
+            if (q == POW10[p]) {
+                q /= 10;
+                e++;
+            }
+            long found = -1;
+            if (matches(q, p, e, target, asFloat)) {
+                found = q;
+            } else {
+                // 2의 거듭제곱 경계에서는 반올림한 쪽이 범위 밖이어도 반대쪽 이웃이 들어갈 수 있습니다.
+                long other = q * POW10[18 - p] > m18 ? q - 1 : q + 1;
+                if (other >= POW10[p - 1] && other < POW10[p] && matches(other, p, e, target, asFloat)) {
+                    found = other;
+                }
+            }
+            if (found < 0) {
+                continue;
+            }
+            if (p == 1) {
+                // Java는 적어도 두 자리로 고릅니다. 한 자리로 되면 두 자리 중 실제 값에 가장 가까운 것
+                long q2 = roundTo(m18, 2);
+                int e2 = exp;
+                if (q2 == 100) {
+                    q2 = 10;
+                    e2++;
+                }
+                if (matches(q2, 2, e2, target, asFloat)) {
+                    foundDigits = q2 * POW10[16];
+                    foundExponent = e2;
+                    return true;
+                }
+            }
+            foundDigits = found * POW10[18 - p];
+            foundExponent = e;
+            return true;
+        }
+        return false;
+    }
+
+    /** BigDecimal로 정확히 구한 18자리 근사 → foundDigits, foundExponent (원본 분석이 틀렸을 때만, 느림) */
+    private static void exactDigits(double abs) {
+        java.math.BigDecimal r = new java.math.BigDecimal(abs).round(
+                new java.math.MathContext(18, java.math.RoundingMode.HALF_EVEN));
+        long unscaled = r.unscaledValue().longValue();
+        int digits = 1;
+        while (digits < 18 && unscaled >= POW10[digits]) {
+            digits++;
+        }
+        foundDigits = unscaled * POW10[18 - digits];
+        foundExponent = r.precision() - r.scale() - 1;
+    }
+
+    /**
+     * Java 11의 정수 규칙. mant: 맨 위 비트(mantBits - 1번)가 1인 가수, binExp: 2진 지수.
+     * 해당하면 true이고 foundDigits(첫 자리가 10^(precision-1) 자리), foundExponent를 채웁니다.
+     */
+    private static boolean javaIntegerForm(long mant, int binExp, int mantBits, int precision) {
+        if (binExp > 62 || binExp < -21) {
+            return false;
+        }
+        int significantBits = mantBits - Long.numberOfTrailingZeros(mant);
+        if (significantBits - binExp - 1 > 0) {
+            return false; // 소수 부분이 있음
+        }
+        long value = binExp >= mantBits - 1 ? mant << (binExp - (mantBits - 1)) : mant >>> ((mantBits - 1) - binExp);
+        int insignificant = 0;
+        if (binExp > mantBits) {
+            int p2 = binExp - mantBits - 1;
+            if (p2 > 1) {
+                insignificant = (int) (p2 * 0.3010299956639812); // floor(p2 * log10(2))
+            }
+        }
+        if (insignificant > 0) {
+            long pow10 = POW10[insignificant];
+            long residue = value % pow10;
+            value /= pow10;
+            if (residue >= (pow10 >> 1)) {
+                value++;
+            }
+        }
+        int digits = 1;
+        while (digits < 19 && value >= POW10[digits]) {
+            digits++;
+        }
+        int exponent = digits - 1 + insignificant;
+        while (value % 10 == 0) {
+            value /= 10;
+            digits--;
+        }
+        if (digits > precision) {
+            return false;
+        }
+        foundDigits = value * POW10[precision - digits];
+        foundExponent = exponent;
+        return true;
+    }
+
+    /** 원본 분석 결과(18자리)를 확인하고, 틀렸으면 정확히 다시 구합니다. */
+    private static void analyzeExactly(double abs, DoubleAnalyzer.Result result) {
+        DoubleAnalyzer.analyze(abs, result);
+        int bexp = (int) (Double.doubleToLongBits(abs) >>> 52) & 0x7FF;
+        // 원본 분석과 읽기가 같이 틀리는 경우가 있어(Double.MIN_NORMAL → 4.49...E307) 2진 지수로도 확인합니다.
+        int estimate = (int) Math.floor((bexp - 1023) * 0.3010299956639812);
+        if (bexp == 0 || Math.abs(result.exponent - estimate) > 1
+                || readBack(result.mantissa, 18, result.exponent) != abs) {
+            exactDigits(abs);
+            result.mantissa = foundDigits;
+            result.exponent = foundExponent;
+        }
+    }
+
+    static void analyzeFloat(float value, FloatAnalyzer.Result result) {
+        float abs = Math.abs(value);
+        result.sign = value < 0;
+        int fbits = Float.floatToIntBits(abs);
+        int fexp = (fbits >>> 23) & 0xFF;
+        if (fexp != 0 && javaIntegerForm((fbits & 0x7FFFFF) | 0x800000, fexp - 127, 24, 9)) {
+            result.mantissa = (int) foundDigits;
+            result.exponent = foundExponent;
+            return;
+        }
+        var exact = new DoubleAnalyzer.Result();
+        analyzeExactly(abs, exact);
+        if (shortest(exact.mantissa, exact.exponent, abs, true)) {
+            result.mantissa = (int) (foundDigits / POW10[9]);
+            result.exponent = foundExponent;
+            return;
+        }
+        FloatAnalyzer.analyze(value, result);
+    }
+
+    static void analyzeDouble(double value, DoubleAnalyzer.Result result) {
+        double abs = Math.abs(value);
+        long bits = Double.doubleToLongBits(abs);
+        int bexp = (int) (bits >>> 52) & 0x7FF;
+        if (bexp != 0 && javaIntegerForm((bits & ((1L << 52) - 1)) | (1L << 52), bexp - 1023, 53, 18)) {
+            result.mantissa = foundDigits;
+            result.exponent = foundExponent;
+            result.sign = value < 0;
+            return;
+        }
+        analyzeExactly(abs, result);
+        result.sign = value < 0;
+        if (bexp == 0 && shortest(result.mantissa, result.exponent, abs, false)) {
+            result.mantissa = foundDigits;
+            result.exponent = foundExponent;
+        }
+    }
+
+    protected TAbstractStringBuilder append(double value) {
+        return insert(length, value);
+    }
+
+    protected TAbstractStringBuilder insert(int target, double value) {
+        if (value == 0) {
+            if (1 / value == Double.POSITIVE_INFINITY) {
+                insertSpace(target, target + 3);
+                buffer[target++] = '0';
+                buffer[target++] = '.';
+                buffer[target++] = '0';
+                return this;
+            } else {
+                insertSpace(target, target + 4);
+                buffer[target++] = '-';
+                buffer[target++] = '0';
+                buffer[target++] = '.';
+                buffer[target++] = '0';
+                return this;
+            }
+        } else if (Double.isNaN(value)) {
+            insertSpace(target, target + 3);
+            buffer[target++] = 'N';
+            buffer[target++] = 'a';
+            buffer[target++] = 'N';
+            return this;
+        } else if (Double.isInfinite(value)) {
+            if (value > 0) {
+                insertSpace(target, target + 8);
+            } else {
+                insertSpace(target, target + 9);
+                buffer[target++] = '-';
+            }
+            buffer[target++] = 'I';
+            buffer[target++] = 'n';
+            buffer[target++] = 'f';
+            buffer[target++] = 'i';
+            buffer[target++] = 'n';
+            buffer[target++] = 'i';
+            buffer[target++] = 't';
+            buffer[target++] = 'y';
+            return this;
+        }
+
+        var number = Constants.doubleAnalysisResult;
+        analyzeDouble(value, number);
+        long mantissa = number.mantissa;
+        int exp = number.exponent;
+        boolean negative = number.sign;
+        int intPart = 1;
+
+        // Get absolute value
+        int sz = 1; // Decimal point always included
+        if (negative) {
+            ++sz; // including '-' sign of mantissa
+        }
+
+        // Mantissa has DECIMAL_PRECISION (18) digits. Split it into two 9-digit ints once, so that the rest
+        // of computations is performed with ints, which is much faster than long arithmetic on JS
+        int mantissaHi = (int) (mantissa / 1000000000L);
+        int mantissaLo = (int) (mantissa - mantissaHi * 1000000000L);
+
+        // Remove trailing zeros
+        int digits = DoubleAnalyzer.DECIMAL_PRECISION;
+        int zeros = mantissaLo == 0 ? 9 + trailingDecimalZeros(mantissaHi) : trailingDecimalZeros(mantissaLo);
+        if (zeros > 0) {
+            digits -= zeros;
+        }
+        var leadingZeros = 0;
+        var leadingZero = false;
+
+        // Handle special case of exponent close to 0
+        if (exp < 7 && exp >= -3) {
+            if (exp >= 0) {
+                intPart = exp + 1;
+                digits = Math.max(digits, intPart + 1);
+                exp = 0;
+            } else {
+                intPart = 0;
+                leadingZeros = -exp - 1;
+                leadingZero = true;
+                sz++;
+                exp = 0;
+            }
+        }
+
+        // Extend buffer to store exponent
+        if (exp != 0) {
+            sz += 2;
+            if (exp <= -10 || exp >= 10) {
+                ++sz;
+            }
+            if (exp <= -100 || exp >= 100) {
+                ++sz;
+            }
+            if (exp < 0) {
+                ++sz;
+            }
+        }
+
+        if (exp != 0 && digits == intPart) {
+            digits++;
+        }
+        sz += digits + leadingZeros;
+
+        // Print mantissa
+        insertSpace(target, target + sz);
+        if (negative) {
+            buffer[target++] = '-';
+        }
+        int pos = 100000000;
+        int part = mantissaHi;
+        boolean lowPart = false;
+        if (leadingZero) {
+            buffer[target++] = '0';
+            buffer[target++] = '.';
+            while (leadingZeros-- > 0) {
+                buffer[target++] = '0';
+            }
+        }
+        for (int i = 0; i < digits; ++i) {
+            int intDigit;
+            if (pos > 0) {
+                intDigit = part / pos;
+                part %= pos;
+                pos /= 10;
+                if (pos == 0 && !lowPart) {
+                    lowPart = true;
+                    part = mantissaLo;
+                    pos = 100000000;
+                }
+            } else {
+                intDigit = 0;
+            }
+            buffer[target++] = (char) ('0' + intDigit);
+            if (--intPart == 0) {
+                buffer[target++] = '.';
+            }
+        }
+
+        // Print exponent
+        if (exp != 0) {
+            buffer[target++] = 'E';
+            if (exp < 0) {
+                exp = -exp;
+                buffer[target++] = '-';
+            }
+            if (exp >= 100) {
+                buffer[target++] = (char) ('0' + exp / 100);
+                exp %= 100;
+                buffer[target++] = (char) ('0' + exp / 10);
+            } else if (exp >= 10) {
+                buffer[target++] = (char) ('0' + exp / 10);
+            }
+            buffer[target++] = (char) ('0' + exp % 10);
+        }
+        return this;
+    }
+
+    private static int trailingDecimalZeros(int n) {
+        if (n % 1000000000 == 0) {
+            return 9;
+        }
+        int result = 0;
+        int zeros = 1;
+        if (n % 100000000 == 0) {
+            result |= 8;
+            zeros *= 100000000;
+        }
+        if (n % (zeros * 10000) == 0) {
+            result |= 4;
+            zeros *= 10000;
+        }
+        if (n % (zeros * 100) == 0) {
+            result |= 2;
+            zeros *= 100;
+        }
+        if (n % (zeros * 10) == 0) {
+            result |= 1;
+        }
+        return result;
+    }
+
+    protected TAbstractStringBuilder append(char c) {
+        return insert(length, c);
+    }
+
+    protected TAbstractStringBuilder insert(int index, char c) {
+        insertSpace(index, index + 1);
+        buffer[index++] = c;
+        return this;
+    }
+
+    protected TAbstractStringBuilder appendCodePoint(int codePoint) {
+        if (codePoint < TCharacter.MIN_SUPPLEMENTARY_CODE_POINT) {
+            return append((char) codePoint);
+        }
+        ensureCapacity(length + 2);
+        buffer[length++] = TCharacter.highSurrogate(codePoint);
+        buffer[length++] = TCharacter.lowSurrogate(codePoint);
+        return this;
+    }
+
+    protected TAbstractStringBuilder append(TObject obj) {
+        return insert(length, obj);
+    }
+
+    protected TAbstractStringBuilder insert(int index, TObject obj) {
+        return insert(index, obj != null ? obj.toString() : "null");
+    }
+
+    protected TAbstractStringBuilder append(boolean b) {
+        return insert(length, b);
+    }
+
+    protected TAbstractStringBuilder insert(int index, boolean b) {
+        return insert(index, b ? "true" : "false");
+    }
+
+    public void ensureCapacity(int capacity) {
+        if (buffer.length >= capacity) {
+            return;
+        }
+        int newLength = buffer.length < Integer.MAX_VALUE / 2
+                ? Math.max(capacity, Math.max(buffer.length * 2, 5))
+                : Integer.MAX_VALUE;
+        buffer = Arrays.copyOf(buffer, newLength);
+    }
+
+    public void trimToSize() {
+        if (buffer.length > length) {
+            buffer = TArrays.copyOf(buffer, length);
+        }
+    }
+
+    public int capacity() {
+        return buffer.length;
+    }
+
+    @Override
+    public String toString() {
+        return new String(buffer, 0, length);
+    }
+
+    @Override
+    public int length() {
+        return length;
+    }
+
+    @Override
+    public char charAt(int index) {
+        if (index < 0 || index >= length) {
+            throw new TIndexOutOfBoundsException();
+        }
+        return buffer[index];
+    }
+
+    @Override
+    public boolean isEmpty() {
+        return length == 0;
+    }
+
+    protected TAbstractStringBuilder append(TCharSequence s, int start, int end) {
+        return insert(length, s, start, end);
+    }
+
+    protected TAbstractStringBuilder insert(int index, TCharSequence s, int start, int end) {
+        if (start > end || end > s.length() || start < 0) {
+            throw new TIndexOutOfBoundsException();
+        }
+        insertSpace(index, index + end - start);
+        for (int i = start; i < end; ++i) {
+            buffer[index++] = s.charAt(i);
+        }
+        return this;
+    }
+
+    protected TAbstractStringBuilder append(TCharSequence s) {
+        return append(s, 0, s.length());
+    }
+
+    protected TAbstractStringBuilder append(TStringBuffer s) {
+        return append((TCharSequence) s);
+    }
+
+    protected TAbstractStringBuilder insert(int index, TCharSequence s) {
+        return insert(index, s, 0, s.length());
+    }
+
+    protected TAbstractStringBuilder append(char[] chars, int offset, int len) {
+        return insert(length, chars, offset, len);
+    }
+
+    protected TAbstractStringBuilder insert(int index, char[] chars) {
+        return insert(index, chars, 0, chars.length);
+    }
+
+    protected TAbstractStringBuilder insert(int index, char[] chars, int offset, int len) {
+        insertSpace(index, index + len);
+        len += offset;
+        while (offset < len) {
+            buffer[index++] = chars[offset++];
+        }
+        return this;
+    }
+
+    protected TAbstractStringBuilder append(char[] chars) {
+        return append(chars, 0, chars.length);
+    }
+
+    @Override
+    public TCharSequence subSequence(int start, int end) {
+        return substring(start, end);
+    }
+
+    public void getChars(int srcBegin, int srcEnd, char[] dst, int dstBegin) {
+        if (srcBegin > srcEnd) {
+            throw new IndexOutOfBoundsException("Index out of bounds");
+        }
+        while (srcBegin < srcEnd) {
+            dst[dstBegin++] = buffer[srcBegin++];
+        }
+    }
+
+    public void setLength(int newLength) {
+        length = newLength;
+    }
+
+    public TAbstractStringBuilder deleteCharAt(int index) {
+        if (index < 0 || index >= length) {
+            throw new TStringIndexOutOfBoundsException();
+        }
+        length--;
+        for (int i = index; i < length; ++i) {
+            buffer[i] = buffer[i + 1];
+        }
+        return this;
+    }
+
+    public TAbstractStringBuilder delete(int start, int end) {
+        if (start < 0 || start > end || start > length) {
+            throw new TStringIndexOutOfBoundsException();
+        }
+        if (start == end) {
+            return this;
+        }
+        if (end > length) {
+            end = length;
+        }
+        int sz = length - end;
+        length -= end - start;
+        for (int i = 0; i < sz; ++i) {
+            buffer[start++] = buffer[end++];
+        }
+        return this;
+    }
+
+    public TAbstractStringBuilder replace(int start, int end, TString str) {
+        if (start < 0 || start > end || start > length) {
+            throw new TStringIndexOutOfBoundsException();
+        }
+        if (end > length) {
+            end = length;
+        }
+        int oldSize = end - start;
+        if (str.length() > oldSize) {
+            insertSpace(end, start + str.length());
+        } else if (str.length() < oldSize) {
+            delete(start + str.length(), end);
+        }
+        for (int i = 0; i < str.length(); ++i) {
+            buffer[start++] = str.charAt(i);
+        }
+        return this;
+    }
+
+    private void insertSpace(int start, int end) {
+        int sz = length - start;
+        ensureCapacity(length + end - start);
+        for (int i = sz - 1; i >= 0; --i) {
+            buffer[end + i] = buffer[start + i];
+        }
+        length += end - start;
+    }
+
+    public int indexOf(TString str) {
+        return indexOf(str, 0);
+    }
+
+    public int indexOf(TString str, int fromIndex) {
+        int sz = length - str.length();
+        outer: for (int i = fromIndex; i <= sz; ++i) {
+            for (int j = 0; j < str.length(); ++j) {
+                if (buffer[i + j] != str.charAt(j)) {
+                    continue outer;
+                }
+            }
+            return i;
+        }
+        return -1;
+    }
+
+    public int lastIndexOf(TString str) {
+        return lastIndexOf(str, length);
+    }
+
+    public int lastIndexOf(TString str, int fromIndex) {
+        fromIndex = Math.min(fromIndex, length - str.length());
+        outer: for (int i = fromIndex; i >= 0; --i) {
+            for (int j = 0; j < str.length(); ++j) {
+                if (buffer[i + j] != str.charAt(j)) {
+                    continue outer;
+                }
+            }
+            return i;
+        }
+        return -1;
+    }
+
+    public TAbstractStringBuilder reverse() {
+        int half = length / 2;
+        for (int i = 0; i < half; ++i) {
+            char tmp = buffer[i];
+            buffer[i] = buffer[length - i - 1];
+            buffer[length - i - 1] = tmp;
+        }
+        return this;
+    }
+
+    public TString substring(int from, int to) {
+        if (from > to || from < 0 || to > length) {
+            throw new TIndexOutOfBoundsException();
+        }
+        return new TString(buffer, from, to - from);
+    }
+
+    public TString substring(int from) {
+        return substring(from, length);
+    }
+
+    public void setCharAt(int index, char ch) {
+        if (index > length) {
+            throw new TIndexOutOfBoundsException();
+        }
+        buffer[index] = ch;
+    }
+
+    public int offsetByCodePoints(int index, int codePointOffset) {
+        return TCharacter.offsetByCodePoints(this, index, codePointOffset);
+    }
+
+    public int codePointCount(int beginIndex, int endIndex) {
+        return TCharacter.codePointCount(this, beginIndex, endIndex);
+    }
+
+    public int codePointAt(int index) {
+        return TCharacter.codePointAt(this, index);
+    }
+
+    public int codePointBefore(int index) {
+        return TCharacter.codePointBefore(this, index);
+    }
+}
