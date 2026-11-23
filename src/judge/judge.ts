@@ -2,7 +2,8 @@
 
 export const normalizeOutput = (text: string): string => {
     const lines = text
-        .replace(/\r\n?/g, '\n')
+        // CRLF만 줄바꿈으로 봅니다. 줄 중간의 단독 \r은 BOJ처럼 다른 글자로 칩니다. (줄 끝이면 trimEnd가 지움)
+        .replace(/\r\n/g, '\n')
         .split('\n')
         .map((line) => line.trimEnd());
     while (lines.length > 0 && lines[lines.length - 1] === '') {
@@ -27,14 +28,18 @@ export const firstDiffLine = (actual: string, expected: string): number | null =
 
 const isNumberToken = (token: string) => /^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i.test(token);
 
+/** 문제가 허용하는 오차의 종류. 둘 다 말하거나 그냥 "오차"라고만 하면 either */
+export type ToleranceMode = 'absolute' | 'relative' | 'either';
+
 /**
  * 실수 오차를 허용하는 비교 (스페셜 저지 문제용). 토큰 수가 같고, 숫자 토큰은
- * 절대 오차나 상대 오차가 tolerance 이하이며, 나머지 토큰은 글자가 같아야 합니다.
+ * 오차(mode에 따라 절대, 상대, 둘 중 하나)가 tolerance 이하이며, 나머지 토큰은 글자가 같아야 합니다.
  */
 export const isSameWithTolerance = (
     actual: string,
     expected: string,
-    tolerance: number
+    tolerance: number,
+    mode: ToleranceMode = 'either'
 ): boolean => {
     const a = actual.trim().split(/\s+/).filter(Boolean);
     const e = expected.trim().split(/\s+/).filter(Boolean);
@@ -45,7 +50,13 @@ export const isSameWithTolerance = (
         if (token === e[i]) return true;
         if (!isNumberToken(token) || !isNumberToken(e[i])) return false;
         const diff = Math.abs(Number(token) - Number(e[i]));
-        return diff <= limit || diff <= limit * Math.abs(Number(e[i]));
+        const absolute = diff <= limit;
+        const relative = diff <= limit * Math.abs(Number(e[i]));
+        return mode === 'absolute'
+            ? absolute
+            : mode === 'relative'
+              ? relative
+              : absolute || relative;
     });
 };
 
@@ -61,7 +72,11 @@ export const hasDecimalNumber = (text: string) =>
  * 10^{-9}, 10^(-9), 10-9(위첨자가 글자로 풀린 것), 2×10^{-3}, 1.0 × 10^{-6}, 1e-9 꼴.
  * 찾지 못하면 null.
  */
-export const findTolerance = (text: string): number | null => {
+export const findTolerance = (text: string): number | null =>
+    findToleranceInfo(text)?.value ?? null;
+
+/** 허용 오차와 그 종류. 그 문장이 "절대 오차"만 말하면 absolute, "상대 오차"만 말하면 relative */
+export const findToleranceInfo = (text: string): { value: number; mode: ToleranceMode } | null => {
     const DASH = '[-−–]';
     const POWER = `10\\s*(?:\\^\\s*)?[{(]?\\s*${DASH}\\s*(\\d{1,2})(?!\\d)\\s*[})]?`;
     // 앞에 붙은 계수 (2×10^{-3}, 1.0 x 10^{-6})
@@ -72,14 +87,25 @@ export const findTolerance = (text: string): number | null => {
     // 소수점(1.0)은 문장을 끊지 않도록, 숫자 사이가 아닌 마침표와 줄바꿈에서만 나눕니다.
     for (const sentence of text.split(/(?<!\d)\.|\.(?!\d)|[。\n]/)) {
         if (!/오차|error/i.test(sentence)) continue;
+        const value = valueIn(sentence);
+        if (value === null) continue;
+        const absolute = /절대|absolute/i.test(sentence);
+        const relative = /상대|relative/i.test(sentence);
+        const mode: ToleranceMode =
+            absolute && !relative ? 'absolute' : relative && !absolute ? 'relative' : 'either';
+        return { value, mode };
+    }
+    return null;
+
+    function valueIn(sentence: string): number | null {
         let match = withMantissa.exec(sentence);
         if (match) return Number(match[1]) * 10 ** -Number(match[2]);
         match = bare.exec(sentence);
         if (match) return 10 ** -Number(match[1]);
         match = exponent.exec(sentence);
         if (match) return Number(match[1]) * 10 ** -Number(match[2]);
+        return null;
     }
-    return null;
 };
 
 /**

@@ -10,6 +10,7 @@
 #    - java.util.Scanner / InputMismatchException 추가 (TeaVM에 없음)
 #    - Thread(ThreadGroup, Runnable, String, long) 생성자 추가 (patch-thread.mjs)
 #    - String.format/printf의 실수 형식(%f, %e, %g)을 OpenJDK와 같게 (TFormatter)
+#    - Java 8/11/15용으로 그 버전의 API만 남긴 javac SDK (release-sdk.mjs)
 # 3) public/java/에 복사
 set -euo pipefail
 
@@ -84,6 +85,9 @@ node "$HERE/classlib-archive.mjs" put "$DIST/compile-classlib-teavm.bin" "$ROOT/
 
 # ThreadGroup을 받는 Thread 생성자 추가 (클래스 파일을 직접 고침)
 node "$HERE/patch-thread.mjs"
+
+# BOJ의 Java 8/11/15(javac -release N)처럼 버전별 표준 API만 남긴 javac SDK (compile-classlib-N.bin)
+(cd "$ROOT" && node "$HERE/release-sdk.mjs" "$JAVA_HOME/lib/ct.sym")
 
 cp "$DIST/compiler.wasm" "$ROOT/public/java/compiler.wasm"
 cp "$DIST/compiler.wasm-runtime.js" "$ROOT/vendor/teavm/wasm-runtime.js"

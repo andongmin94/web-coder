@@ -4,6 +4,7 @@ import {
     hasDecimalNumber,
     isSameOutput,
     isSameWithTolerance,
+    type ToleranceMode,
     normalizeOutput,
 } from '../judge/judge.ts';
 import { OUTPUT_LIMIT } from '../runner/output.ts';
@@ -33,6 +34,9 @@ export type JudgeContext = {
     specialJudge: boolean;
     /** 스페셜 저지 문제의 실수 허용 오차 (모르면 null) */
     tolerance: number | null;
+    toleranceMode: ToleranceMode;
+    /** 인터랙티브 문제: 예제 출력과 비교하지 않음 */
+    interactive: boolean;
     /** 메모리 제한 (MB, 모르면 null) */
     memoryLimitMB: number | null;
 };
@@ -46,9 +50,14 @@ export const verdictOf = (test: TestCase, result: RunResult, judge: JudgeContext
     if (result.status === 'timeout') return 'timeout';
     if (result.status === 'internal-error' || result.status === 'runtime-error') return 'error';
     if (result.output.truncated) return 'olimit';
-    if (!test.expected.trim()) return 'output';
+    if (!test.expected.trim() || judge.interactive) return 'output';
     if (usesTolerance(test, judge))
-        return isSameWithTolerance(result.output.stdout, test.expected, judge.tolerance!)
+        return isSameWithTolerance(
+            result.output.stdout,
+            test.expected,
+            judge.tolerance!,
+            judge.toleranceMode
+        )
             ? 'pass'
             : 'fail';
     if (judge.specialJudge) return 'output';

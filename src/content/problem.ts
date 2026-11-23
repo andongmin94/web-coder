@@ -3,7 +3,7 @@
 // BOJ는 주소창으로 연 페이지 이동에만 본문을 주고, fetch·iframe 요청에는 빈 응답을 줍니다.
 // 그래서 사용자가 문제 페이지(/problem/*)를 열 때 그 페이지에서 읽어 저장해 두고,
 // 제출 페이지는 저장된 데이터를 씁니다.
-import { findTolerance } from '../judge/judge.ts';
+import { findToleranceInfo } from '../judge/judge.ts';
 import { normalizeLabel } from '../shared/languages.ts';
 import type { ProblemData, ProblemSection, Sample } from '../shared/protocol.ts';
 
@@ -32,6 +32,18 @@ const parseNumber = (value: string): number | null => {
  * 구분자가 붙은 TeX 원문(`\(N\)`, `\[x\]`, `$N$`, `$$x$$`)을 나눕니다.
  * BOJ의 MathJax 3은 원문을 `span.mjx-copytext`에 이 꼴로만 남깁니다.
  */
+
+/** 스페셜 저지 문제의 허용 오차와 종류 (절대/상대) */
+const toleranceOf = (isSpecialJudge: boolean, text: string) => {
+    // 답이 여러 개인 문제는 예제와 다른 답도 맞으므로 오차 비교를 하지 않고 출력만 보여 줍니다.
+    const manyAnswers =
+        /(정답|답|방법)[이은가]?\s*여러\s*(개|가지)|아무거나|any\s+(one\s+)?of\s+them|multiple\s+(answers|solutions)/i.test(
+            text
+        );
+    const info = isSpecialJudge && !manyAnswers ? findToleranceInfo(text) : null;
+    return { tolerance: info?.value ?? null, toleranceMode: info?.mode ?? null };
+};
+
 export const splitTexDelimiters = (text: string): { tex: string; display: boolean } | null => {
     const value = text.trim();
     const patterns: [RegExp, boolean][] = [
@@ -100,8 +112,9 @@ export const parseProblemDocument = (id: string, doc: Document, origin: string):
         const n = input.id.slice('sample-input-'.length);
         const output = doc.getElementById(`sample-output-${n}`);
         samples.push({
-            input: (input.textContent ?? '').replace(/\r/g, ''),
-            output: (output?.textContent ?? '').replace(/\r/g, ''),
+            // 예제의 &nbsp;는 채점 데이터에서는 보통 공백입니다. (그대로 두면 cin, int()가 못 읽음)
+            input: (input.textContent ?? '').replace(/\r/g, '').replace(/\u00a0/g, ' '),
+            output: (output?.textContent ?? '').replace(/\r/g, '').replace(/\u00a0/g, ' '),
         });
     }
 
@@ -110,6 +123,15 @@ export const parseProblemDocument = (id: string, doc: Document, origin: string):
     const memory = text(infoCells[1]);
 
     const isSpecialJudge = Boolean(doc.querySelector('.problem-label-spj'));
+    // 제목 옆 라벨: 함수 구현(main 없이 함수만 제출), 인터랙티브(채점기와 입출력을 주고받음)
+    const labels = [...doc.querySelectorAll('[class*="problem-label"]')].map(
+        (el) => `${el.className} ${text(el)}`
+    );
+    const kind: ProblemData['kind'] = labels.some((l) => /problem-label-func|함수 구현/.test(l))
+        ? 'function'
+        : labels.some((l) => /interactive|인터랙티브/i.test(l))
+          ? 'interactive'
+          : null;
 
     // "하단 참고" 문제의 언어별 시간 제한 목록 (<li>Java 8: 1.5 초</li>)
     const languageTimeLimits: Record<string, number> = {};
@@ -128,7 +150,8 @@ export const parseProblemDocument = (id: string, doc: Document, origin: string):
         memoryLimitMB: parseNumber(memory),
         limitText: { time, memory },
         isSpecialJudge,
-        tolerance: isSpecialJudge ? findTolerance(body.textContent ?? '') : null,
+        kind,
+        ...toleranceOf(isSpecialJudge, body.textContent ?? ''),
         sections,
         samples,
     };

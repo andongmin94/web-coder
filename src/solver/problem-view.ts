@@ -36,6 +36,18 @@ export const limitChips = (problem: ProblemData) =>
                     ? `스페셜 저지 · 오차 ${problem.tolerance.toExponential(0)}`
                     : '스페셜 저지'
             ),
+        problem.kind &&
+            h(
+                'span',
+                {
+                    class: 'chip chip-warn',
+                    title:
+                        problem.kind === 'function'
+                            ? 'main 없이 함수만 제출하는 문제라 로컬에서 실행할 수 없습니다.'
+                            : '채점기와 입출력을 주고받는 문제라 예제를 비교하지 않고 출력만 보여 줍니다.',
+                },
+                problem.kind === 'function' ? '함수 구현' : '인터랙티브'
+            ),
     ].filter((el): el is HTMLSpanElement => Boolean(el));
 
 /** 예제 칸 제목 옆 "복사" 버튼 (백준과 같음) */

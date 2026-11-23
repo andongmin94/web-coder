@@ -21,6 +21,8 @@ export type ResolvedLanguage = BojLanguage & {
     runtime: RuntimeKey;
     /** C++ 표준 (cpp 런타임일 때만) */
     cppStd?: string;
+    /** BOJ의 javac -release 값 '8' | '11' | '15' (java 런타임일 때만, ''면 제한 없음) */
+    javaRelease?: string;
 };
 
 const CPP_TEMPLATE = `#include <bits/stdc++.h>
@@ -73,6 +75,9 @@ const CPP_STD: Record<string, string> = {
     '26': 'c++2c',
 };
 
+/** 버전별로 거른 javac SDK가 있는 Java 버전 (tools/java/release-sdk.mjs) */
+export const JAVA_RELEASES = ['8', '11', '15'];
+
 /** BOJ 언어 이름을 로컬 런타임으로 매핑합니다. 지원하지 않으면 null. */
 /** BOJ 언어 이름의 공백을 정리합니다. (폼과 문제 페이지의 표기를 같은 키로 맞춤) */
 export const normalizeLabel = (label: string) => label.replace(/\s+/g, ' ').trim();
@@ -91,8 +96,16 @@ export const resolveLanguage = (lang: BojLanguage): ResolvedLanguage | null => {
     }
 
     // Java 8, Java 11, Java 8 (OpenJDK) 등. 로컬에서는 모두 같은 javac(TeaVM)로 실행합니다.
-    if (/^Java(\s+\d+)?(\s*\(OpenJDK\))?$/i.test(label)) {
-        return { ...lang, label, runtime: 'java' };
+    const java = /^Java(?:\s+(\d+))?(?:\s*\(OpenJDK\))?$/i.exec(label);
+    if (java) {
+        // BOJ는 Java 8, 8 (OpenJDK), 11, 15를 javac -release N으로 컴파일합니다. (번호 없는 "Java"는 8)
+        const version = java[1] ?? '8';
+        return {
+            ...lang,
+            label,
+            runtime: 'java',
+            javaRelease: JAVA_RELEASES.includes(version) ? version : '',
+        };
     }
 
     if (/^node\.?js$/i.test(label)) {

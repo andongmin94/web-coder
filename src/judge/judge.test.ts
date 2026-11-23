@@ -126,3 +126,24 @@ test('문제에 정한 언어별 시간 제한은 보정 없이 그대로', () =
     assert.equal(problemTimeLimitMs({ runtime: 'java', label: 'Java 11' }, problem), 3000);
     assert.equal(problemTimeLimitMs({ runtime: 'python', label: 'Python 3' }, problem), 5000);
 });
+
+test('절대 오차만 말한 문제는 상대 오차로 봐주지 않는다', async () => {
+    const { findToleranceInfo } = await import('./judge.ts');
+    assert.deepEqual(findToleranceInfo('정답과의 절대 오차가 10^{-2} 이하이면 정답이다.'), {
+        value: 1e-2,
+        mode: 'absolute',
+    });
+    assert.equal(findToleranceInfo('상대 오차가 10^{-6} 이하이면 정답이다.')?.mode, 'relative');
+    assert.equal(findToleranceInfo('절대/상대 오차는 10^{-9}까지 허용한다.')?.mode, 'either');
+    assert.equal(findToleranceInfo('오차는 10^{-6}까지 허용한다.')?.mode, 'either');
+    assert.ok(!isSameWithTolerance('100.90', '100.00', 1e-2, 'absolute'));
+    assert.ok(isSameWithTolerance('100.005', '100.00', 1e-2, 'absolute'));
+    assert.ok(isSameWithTolerance('100.90', '100.00', 1e-2, 'relative'));
+    assert.ok(isSameWithTolerance('100.90', '100.00', 1e-2));
+});
+
+test('줄 중간의 단독 \r은 줄바꿈이 아니다', () => {
+    assert.ok(!isSameOutput('1\r2', '1\n2'));
+    assert.ok(isSameOutput('1\r\n2\r\n', '1\n2'));
+    assert.ok(isSameOutput('1\r\n2\r', '1\n2'));
+});

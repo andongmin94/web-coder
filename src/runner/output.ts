@@ -6,6 +6,10 @@
  */
 export const OUTPUT_LIMIT = 32 << 20; // 32MB
 
+/** 표준 에러는 채점과 상관없으니 이만큼만 모읍니다. (디버그 출력이 많아도 출력 초과가 되지 않게) */
+const STDERR_LIMIT = 1 << 20; // 1MB
+const STDERR_CUT = '\n[표준 에러가 너무 길어 뒷부분은 생략했습니다]\n';
+
 export class OutputLimitError extends Error {
     constructor() {
         super('output limit');
@@ -58,14 +62,22 @@ export class OutputCollector {
     }
 
     write = (fd: 1 | 2, chunk: string) => {
-        const room = OUTPUT_LIMIT - this.stdout.length - this.stderr.length;
+        if (fd === 2) {
+            // 백준은 표준 에러를 채점하지 않으므로 출력 초과로 치지 않고, 앞부분만 남깁니다.
+            const room = STDERR_LIMIT - this.stderr.length;
+            if (room >= 0) {
+                this.stderr += chunk.length > room ? chunk.slice(0, room) + STDERR_CUT : chunk;
+                this.progress();
+            }
+            return;
+        }
+        const room = OUTPUT_LIMIT - this.stdout.length;
         if (room <= 0) {
             this.truncated = true;
             throw new OutputLimitError();
         }
         const piece = chunk.length > room ? chunk.slice(0, room) : chunk;
-        if (fd === 1) this.stdout += piece;
-        else this.stderr += piece;
+        this.stdout += piece;
         this.progress();
         if (piece.length < chunk.length) {
             this.truncated = true;

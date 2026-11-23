@@ -2,6 +2,7 @@
 // 빌드 방법과 패치 내용은 tools/java/README.md 참고.
 import { load } from '../../vendor/teavm/wasm-runtime.js';
 import type { CompilerRequest, CompilerResponse } from '../runner/types.ts';
+import { findNewerSyntax } from './java-syntax.ts';
 
 type Diagnostic = {
     type: 'javac' | 'teavm';
@@ -62,20 +63,47 @@ const reply = (message: CompilerResponse, transfer: Transferable[] = []) =>
 
 // 이 워커는 sandbox 안의 blob 워커로 돌아서 확장 리소스를 직접 읽지 못합니다.
 // sandbox 호스트가 'assets' 메시지로 컴파일러 파일을 넘겨 줍니다.
-type Assets = { wasm: ArrayBuffer; sdk: ArrayBuffer; classlib: ArrayBuffer };
+type Assets = { wasm: ArrayBuffer; sdks: Record<string, ArrayBuffer>; classlib: ArrayBuffer };
 let provideAssets!: (assets: Assets) => void;
 const assetsPromise = new Promise<Assets>((resolve) => (provideAssets = resolve));
 
 let diagnostics: Diagnostic[] = [];
 
 const createCompiler = async (): Promise<TeaVMJavac> => {
-    const { wasm, sdk, classlib } = await assetsPromise;
+    const { wasm, sdks, classlib } = await assetsPromise;
     const teavm = await load<{ createCompiler(): TeaVMJavac }>(new Uint8Array(wasm));
     const compiler = teavm.exports.createCompiler();
-    compiler.setSdk(new Int8Array(sdk));
+    compiler.setSdk(new Int8Array(sdks['']));
+    currentRelease = '';
     compiler.setTeaVMClasslib(new Int8Array(classlib));
     compiler.onDiagnostic((d) => diagnostics.push(d));
     return compiler;
+};
+
+/** 지금 javac에 올린 SDK의 Java 버전 */
+let currentRelease = '';
+
+/** BOJ의 javac -release N처럼, 그 버전의 표준 API만 있는 SDK로 바꿉니다. */
+const selectRelease = async (compiler: TeaVMJavac, release: string) => {
+    if (release === currentRelease) return;
+    const { sdks } = await assetsPromise;
+    compiler.setSdk(new Int8Array(sdks[release] ?? sdks['']));
+    currentRelease = sdks[release] ? release : '';
+};
+
+/** 버전보다 새로운 문법을 javac 진단 형식으로 (javac 자체는 문법 수준을 바꿀 수 없음) */
+const syntaxDiagnostics = (source: string, release: string): Diagnostic[] => {
+    if (!release) return [];
+    return findNewerSyntax(source, Number(release)).map((issue) => ({
+        type: 'javac',
+        severity: 'error',
+        fileName: 'Main.java',
+        lineNumber: source.slice(0, issue.start).split('\n').length,
+        message: issue.message,
+        startPosition: issue.start,
+        endPosition: issue.end,
+        position: issue.start,
+    }));
 };
 
 let compilerPromise: Promise<TeaVMJavac> | null = null;
@@ -118,7 +146,7 @@ const formatDiagnostics = (list: Diagnostic[], source = '') =>
         })
         .join('\n');
 
-const compile = async (source: string): Promise<CompilerResponse> => {
+const compile = async (source: string, release: string): Promise<CompilerResponse> => {
     if (!/\bclass\s+Main\b/.test(source)) {
         return {
             type: 'compile',
@@ -127,7 +155,17 @@ const compile = async (source: string): Promise<CompilerResponse> => {
             diagnostics: '백준 Java 제출은 클래스 이름이 Main이어야 합니다. (public class Main)',
         };
     }
+    const syntax = syntaxDiagnostics(source, release);
+    if (syntax.length) {
+        return {
+            type: 'compile',
+            id: 0,
+            ok: false,
+            diagnostics: formatDiagnostics(syntax, source),
+        };
+    }
     const compiler = await getCompiler();
+    await selectRelease(compiler, release);
     diagnostics = [];
     compiler.clearSourceFiles();
     compiler.clearOutputFiles();
@@ -161,14 +199,15 @@ const compile = async (source: string): Promise<CompilerResponse> => {
 };
 
 /** 실시간 진단: javac만 돌려 위치가 있는 진단을 돌려줍니다. (WebAssembly 생성 없음) */
-const check = async (source: string): Promise<JavaCheckDiagnostic[]> => {
+const check = async (source: string, release: string): Promise<JavaCheckDiagnostic[]> => {
     const compiler = await getCompiler();
+    await selectRelease(compiler, release);
     diagnostics = [];
     compiler.clearSourceFiles();
     compiler.clearOutputFiles();
     compiler.addSourceFile('Main.java', source);
     compiler.compile();
-    return diagnostics
+    return [...syntaxDiagnostics(source, release), ...diagnostics]
         .filter((d) => d.type === 'javac' && d.fileName === 'Main.java' && d.severity !== 'other')
         .map((d) => {
             const from = Math.max(0, d.startPosition ?? d.position ?? 0);
@@ -188,7 +227,7 @@ self.addEventListener(
         event: MessageEvent<
             | CompilerRequest
             | ({ type: 'assets' } & Assets)
-            | { type: 'check'; id: number; source: string }
+            | { type: 'check'; id: number; source: string; release: string }
         >
     ) => {
         const req = event.data;
@@ -202,7 +241,7 @@ self.addEventListener(
                 (self as unknown as Worker).postMessage({
                     type: 'check',
                     id: req.id,
-                    diagnostics: await check(req.source),
+                    diagnostics: await check(req.source, req.release ?? ''),
                 });
             } catch {
                 (self as unknown as Worker).postMessage({
@@ -219,7 +258,7 @@ self.addEventListener(
                 return;
             }
             if (req.type !== 'compile') return;
-            const res = await compile(req.source);
+            const res = await compile(req.source, req.std);
             reply(
                 { ...res, id: req.id },
                 res.type === 'compile' && res.artifact ? [res.artifact.buffer] : []

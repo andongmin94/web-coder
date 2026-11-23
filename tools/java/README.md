@@ -4,12 +4,13 @@
 OpenJDK의 javac와 [TeaVM](https://teavm.org)(Java 바이트코드 → WebAssembly 컴파일러)을
 하나의 wasm-gc 모듈로 만든 것으로, 브라우저 안에서 `Main.java → .class → .wasm` 컴파일을 합니다.
 
-| 파일                               | 내용                                                                              |
-| ---------------------------------- | --------------------------------------------------------------------------------- |
-| `public/java/compiler.wasm`        | javac + TeaVM (wasm-gc)                                                           |
-| `public/java/compile-classlib.bin` | javac가 참조하는 표준 라이브러리 시그니처 (+ `Scanner`, `InputMismatchException`) |
-| `public/java/runtime-classlib.bin` | TeaVM 표준 라이브러리 구현 (+ stdin 패치, `Scanner`, `Formatter`)                 |
-| `vendor/teavm/wasm-runtime.js`     | TeaVM wasm-gc JS 런타임                                                           |
+| 파일                                 | 내용                                                                              |
+| ------------------------------------ | --------------------------------------------------------------------------------- |
+| `public/java/compiler.wasm`          | javac + TeaVM (wasm-gc)                                                           |
+| `public/java/compile-classlib.bin`   | javac가 참조하는 표준 라이브러리 시그니처 (+ `Scanner`, `InputMismatchException`) |
+| `public/java/compile-classlib-N.bin` | 위 SDK에서 Java N(8, 11, 15)에 없는 API를 뺀 것 (`release-sdk.mjs`)               |
+| `public/java/runtime-classlib.bin`   | TeaVM 표준 라이브러리 구현 (+ stdin 패치, `Scanner`, `Formatter`)                 |
+| `vendor/teavm/wasm-runtime.js`       | TeaVM wasm-gc JS 런타임                                                           |
 
 ## 다시 만들기
 
@@ -35,6 +36,11 @@ JAVA_HOME=/path/to/jdk-25 tools/java/build.sh
   TeaVM의 `Thread`에 없는 `Thread(ThreadGroup, Runnable, String, long)` 계열 생성자와 `ThreadGroup`을 추가합니다.
   (`new Thread(null, r, "", 1 << 26).start()` 관용구용. 스레드 그룹과 스택 크기는 무시)
   JDK 없이 `public/java/`의 클래스 파일을 직접 고치며, `build.sh`가 마지막에 실행합니다.
+- `release-sdk.mjs`
+  BOJ는 Java 8/11/15를 `javac -release N`으로 컴파일해서, 그 버전에 없는 API(`stream().toList()`, `"".formatted()` 등)는 컴파일 에러입니다.
+  JDK의 `lib/ct.sym`(javac `--release`가 쓰는 버전별 공개 API)과 비교해 SDK에서 그 버전에 없는 클래스와 멤버를 뺀
+  `compile-classlib-8.bin`, `-11.bin`, `-15.bin`을 만듭니다. 실행기는 BOJ 언어의 버전에 맞는 것을 javac에 올립니다.
+  문법(record, switch 식, text block 등)은 javac의 문법 수준을 바꿀 수 없어서 `src/sandbox/java-syntax.ts`가 따로 검사합니다.
 - `classlib-archive.mjs`: TeaVM 클래스 라이브러리 아카이브(gzip + 길이 접두 항목) 읽기/쓰기
 
 ## 알려진 한계

@@ -23,9 +23,15 @@ export type SandboxRequest =
           stdin: string;
           timeoutMs: number;
       }
-    | { type: 'java-assets'; wasm: ArrayBuffer; sdk: ArrayBuffer; classlib: ArrayBuffer }
-    | { type: 'java-compile'; id: number; source: string }
-    | { type: 'java-check'; id: number; source: string }
+    | {
+          type: 'java-assets';
+          wasm: ArrayBuffer;
+          /** javac SDK: Java 버전('8', '11', '15', 제한 없음 '') → 아카이브 */
+          sdks: Record<string, ArrayBuffer>;
+          classlib: ArrayBuffer;
+      }
+    | { type: 'java-compile'; id: number; source: string; release: string }
+    | { type: 'java-check'; id: number; source: string; release: string }
     | { type: 'cancel' };
 
 export type SandboxRunResponse = {

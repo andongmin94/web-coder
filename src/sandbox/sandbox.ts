@@ -97,7 +97,11 @@ const run = (req: Extract<SandboxRequest, { type: 'run' }>) => {
 
 // ── Java 컴파일 ─────────────────────────────────────────────────────
 
-let javaAssets: { wasm: ArrayBuffer; sdk: ArrayBuffer; classlib: ArrayBuffer } | null = null;
+let javaAssets: {
+    wasm: ArrayBuffer;
+    sdks: Record<string, ArrayBuffer>;
+    classlib: ArrayBuffer;
+} | null = null;
 let compiler: Worker | null = null;
 let nextCompileId = 1;
 const compiles = new Map<number, (r: CompilerResponse | null) => void>();
@@ -150,7 +154,7 @@ const compileJava = async (req: Extract<SandboxRequest, { type: 'java-compile' }
             clearTimeout(timer);
             resolve(r);
         });
-        worker.postMessage({ type: 'compile', id, source: req.source, std: '' });
+        worker.postMessage({ type: 'compile', id, source: req.source, std: req.release });
     });
     compilingNow--;
     if (!res) {
@@ -183,7 +187,7 @@ const checkJava = async (req: Extract<SandboxRequest, { type: 'java-check' }>) =
             clearTimeout(timer);
             resolve(r);
         });
-        worker.postMessage({ type: 'check', id, source: req.source });
+        worker.postMessage({ type: 'check', id, source: req.source, release: req.release });
     });
     const diagnostics = (res as { diagnostics?: JavaCheckDiagnostic[] } | null)?.diagnostics ?? [];
     reply({ kind: 'check', id: req.id, diagnostics });
@@ -199,7 +203,7 @@ window.addEventListener('message', (event: MessageEvent<SandboxRequest>) => {
             run(req);
             break;
         case 'java-assets':
-            javaAssets = { wasm: req.wasm, sdk: req.sdk, classlib: req.classlib };
+            javaAssets = { wasm: req.wasm, sdks: req.sdks, classlib: req.classlib };
             getCompiler(); // 미리 로딩
             break;
         case 'java-compile':

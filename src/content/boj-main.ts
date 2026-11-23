@@ -66,6 +66,13 @@ const setSource = (source: string) => {
     if (area) area.value = source;
 };
 
+const fill = (req: Extract<MainRequest, { type: 'fill' }>): MainReply => {
+    const ok = setLanguage(req.languageId);
+    setCodeOpen(req.codeOpen);
+    setSource(req.source);
+    return { id: req.id, ok };
+};
+
 const submit = (req: Extract<MainRequest, { type: 'submit' }>): MainReply => {
     const f = form();
     if (!f) return { id: req.id, ok: false, message: '제출 폼을 찾지 못했습니다.' };
@@ -111,7 +118,9 @@ window.addEventListener(MAIN_REQUEST_EVENT, (event) => {
                 ? { id: req.id, ok: true, source: readSource() }
                 : req.type === 'refresh-editor'
                   ? (codeMirror()?.refresh?.(), { id: req.id, ok: true })
-                  : submit(req);
+                  : req.type === 'fill'
+                    ? fill(req)
+                    : submit(req);
     } catch (error) {
         reply = {
             id: req.id,

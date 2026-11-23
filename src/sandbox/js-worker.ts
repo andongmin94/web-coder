@@ -57,11 +57,23 @@ export function jsWorkerMain(prelude: string) {
 
         g.__stdin = stdin;
         g.__write = (fd, text) => {
+            if (fd === 2) {
+                // 표준 에러는 채점하지 않으므로 출력 초과로 치지 않고 앞 1MB만 남깁니다. (output.ts와 같음)
+                const room = (1 << 20) - stderr.length;
+                if (room >= 0) {
+                    stderr +=
+                        text.length > room
+                            ? text.slice(0, room) +
+                              '\n[표준 에러가 너무 길어 뒷부분은 생략했습니다]\n'
+                            : text;
+                    progress();
+                }
+                return;
+            }
             if (truncated) throw new OutputLimit();
-            const room = LIMIT - stdout.length - stderr.length;
+            const room = LIMIT - stdout.length;
             const piece = text.length > room ? text.slice(0, room) : text;
-            if (fd === 2) stderr += piece;
-            else stdout += piece;
+            stdout += piece;
             progress();
             if (piece.length < text.length) {
                 truncated = true;

@@ -26,8 +26,12 @@ export type ProblemData = {
     memoryLimitMB: number | null;
     limitText: { time: string; memory: string };
     isSpecialJudge: boolean;
+    /** 함수 구현 문제(main 없음) / 인터랙티브 문제. 로컬 예제 실행으로 확인할 수 없습니다. 예전에 저장한 문제에는 없음 */
+    kind?: 'function' | 'interactive' | null;
     /** 스페셜 저지 문제의 실수 허용 오차 (본문에서 찾음). 예전에 저장한 문제에는 없음 */
     tolerance?: number | null;
+    /** 허용 오차의 종류 (절대/상대/둘 중 하나). 예전에 저장한 문제에는 없음 */
+    toleranceMode?: 'absolute' | 'relative' | 'either' | null;
     sections: ProblemSection[];
     samples: Sample[];
 };
@@ -58,7 +62,8 @@ export type ParentToSolver =
 export type SolverToParent =
     | { type: 'ready' }
     | { type: 'submit'; languageId: string; source: string; codeOpen: string | null }
-    | { type: 'restore' };
+    /** 원래 화면으로. 코드를 주면 원래 폼에 옮겨 둡니다. (그대로 제출하거나 다시 열 때 최신 코드가 되도록) */
+    | { type: 'restore'; languageId?: string; source?: string; codeOpen?: string | null };
 
 /** content script(격리 world) ↔ MAIN world 스크립트 사이 이벤트 이름 */
 export const MAIN_REQUEST_EVENT = 'webcoder:main-request';
@@ -68,7 +73,9 @@ export type MainRequest =
     | { id: number; type: 'read-source' }
     /** 숨겨져 있던 원래 폼을 다시 보일 때 BOJ 에디터(CodeMirror 5)를 다시 그리게 함 */
     | { id: number; type: 'refresh-editor' }
-    | { id: number; type: 'submit'; languageId: string; source: string; codeOpen: string | null };
+    | { id: number; type: 'submit'; languageId: string; source: string; codeOpen: string | null }
+    /** 제출하지 않고 원래 폼에 언어와 코드만 채움 (BOJ 기본 화면으로 돌아갈 때) */
+    | { id: number; type: 'fill'; languageId: string; source: string; codeOpen: string | null };
 
 export type MainReply = {
     id: number;

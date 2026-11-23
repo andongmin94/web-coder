@@ -212,6 +212,8 @@ const allTests = (): TestCase[] => [
 const judgeContext = (): JudgeContext => ({
     specialJudge: problem?.isSpecialJudge ?? false,
     tolerance: problem?.tolerance ?? null,
+    toleranceMode: problem?.toleranceMode ?? 'either',
+    interactive: problem?.kind === 'interactive',
     memoryLimitMB:
         current && problem?.memoryLimitMB
             ? judgeMemoryLimitMB(current, problem.memoryLimitMB)
@@ -534,7 +536,12 @@ const loadJavaIndex = () => {
 };
 
 const intelFor = (lang: ResolvedLanguage): LanguageIntel => {
-    const key = lang.runtime === 'cpp' ? `cpp:${lang.cppStd}` : lang.runtime;
+    const key =
+        lang.runtime === 'cpp'
+            ? `cpp:${lang.cppStd}`
+            : lang.runtime === 'java'
+              ? `java:${lang.javaRelease}`
+              : lang.runtime;
     let intel = intels.get(key);
     if (!intel) {
         switch (lang.runtime) {
@@ -548,7 +555,9 @@ const intelFor = (lang: ResolvedLanguage): LanguageIntel => {
                 intel = createPythonIntel();
                 break;
             case 'java':
-                intel = createJavaIntel(loadJavaIndex, (code) => pool.javaCheck(code));
+                intel = createJavaIntel(loadJavaIndex, (code) =>
+                    pool.javaCheck(code, lang.javaRelease ?? '')
+                );
                 break;
         }
         intels.set(key, intel);
@@ -564,7 +573,6 @@ const switchLanguage = async (lang: ResolvedLanguage, initialCode?: string) => {
     const seq = ++switchSeq;
     if (current) saveCodeNow();
     languageSelect.value = lang.id;
-    void storage.updatePrefs({ lastLanguageLabel: lang.label });
 
     const saved = problemId ? await storage.getCode(problemId, lang.id) : undefined;
     const code = initialCode ?? saved ?? (await templateFor(lang.runtime));
@@ -598,7 +606,9 @@ const requestSubmit = () => {
     }
     let warning: string | null = null;
     const sameCode = lastRun && lastRun.source === source && lastRun.languageId === current.id;
-    if (!sameCode) {
+    if (problem?.kind === 'function') {
+        // 함수만 제출하는 문제는 로컬에서 컴파일·실행할 수 없으니 묻지 않습니다.
+    } else if (!sameCode) {
         warning = '지금 코드로 아직 예제를 실행하지 않았습니다.';
     } else if (lastRun!.compileError) {
         warning = '컴파일 에러가 있는 코드입니다.';
@@ -726,12 +736,27 @@ const init = async (data: {
 // ── 이벤트 연결 ─────────────────────────────────────────────────
 const restore = () => {
     saveCodeNow();
-    send({ type: 'restore' });
+    // 편집한 코드를 원래 폼에 옮겨 둡니다. 그러지 않으면 원래 폼에 남은 옛 코드가 제출되거나,
+    // 웹 코더를 다시 열 때 그 옛 코드가 저장해 둔 코드를 덮어씁니다.
+    send(
+        current
+            ? {
+                  type: 'restore',
+                  languageId: current.id,
+                  source: editor.value,
+                  codeOpen: codeOpenValue,
+              }
+            : { type: 'restore' }
+    );
 };
 
 languageSelect.addEventListener('change', () => {
     const lang = languages.find((l) => l.id === languageSelect.value);
-    if (lang) void switchLanguage(lang);
+    if (!lang) return;
+    // 사용자가 직접 고른 언어만 기억합니다. (그 언어가 없는 문제에서 자동으로 고른 언어가
+    // 다른 문제의 기본 언어를 바꾸지 않게)
+    void storage.updatePrefs({ lastLanguageLabel: lang.label });
+    void switchLanguage(lang);
 });
 codeOpenSelect.addEventListener('change', () => (codeOpenValue = codeOpenSelect.value));
 runButton.addEventListener('click', () => void runTests());

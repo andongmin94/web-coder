@@ -4,7 +4,7 @@
 // - C++ 결과물/Python: 실행 워커 풀에서 병렬 실행, 시간 초과 시 terminate 후 교체
 // - JavaScript: sandbox 페이지(eval 허용)의 워커에서 V8로 실행
 //               재귀가 깊어 스택이 넘치면 실행 워커의 QuickJS 깊은 재귀 모드로 다시 실행 (node-deep.ts)
-import type { ResolvedLanguage } from '../shared/languages.ts';
+import { JAVA_RELEASES, type ResolvedLanguage } from '../shared/languages.ts';
 import type {
     SandboxCheckResponse,
     SandboxCompileResponse,
@@ -60,6 +60,8 @@ type WithoutId<T> = T extends unknown ? Omit<T, 'id'> : never;
 class RunnerWorker {
     readonly worker = new Worker(RUNNER_URL);
     busy = false;
+    /** 워커에서 잡히지 않은 오류가 났음: 상태를 믿을 수 없으니 다시 쓰지 않습니다. */
+    crashed = false;
     private nextId = 1;
     private pending = new Map<
         number,
@@ -89,6 +91,7 @@ class RunnerWorker {
         });
         this.worker.addEventListener('error', (e) => {
             e.preventDefault();
+            this.crashed = true;
             for (const [id, p] of this.pending)
                 p.resolve({ type: 'error', id, message: e.message || '워커 오류' });
             this.pending.clear();
@@ -187,7 +190,11 @@ class CompilerWorker {
 
 const JAVA_ASSETS = {
     wasm: 'java/compiler.wasm',
-    sdk: 'java/compile-classlib.bin',
+    /** javac SDK: 버전별로 거른 것과 제한 없는 것('') */
+    sdks: {
+        '': 'java/compile-classlib.bin',
+        ...Object.fromEntries(JAVA_RELEASES.map((r) => [r, `java/compile-classlib-${r}.bin`])),
+    } as Record<string, string>,
     classlib: 'java/runtime-classlib.bin',
 };
 
@@ -257,12 +264,14 @@ class Sandbox {
                 if (!response.ok) throw new Error(`${path}를 불러오지 못했습니다.`);
                 return response.arrayBuffer();
             };
-            const [wasm, sdk, classlib] = await Promise.all([
+            const releases = Object.keys(JAVA_ASSETS.sdks);
+            const [wasm, classlib, ...sdkList] = await Promise.all([
                 read(JAVA_ASSETS.wasm),
-                read(JAVA_ASSETS.sdk),
                 read(JAVA_ASSETS.classlib),
+                ...releases.map((r) => read(JAVA_ASSETS.sdks[r])),
             ]);
-            this.post({ type: 'java-assets', wasm, sdk, classlib }, [wasm, sdk, classlib]);
+            const sdks = Object.fromEntries(releases.map((r, i) => [r, sdkList[i]]));
+            this.post({ type: 'java-assets', wasm, sdks, classlib }, [wasm, classlib, ...sdkList]);
         })();
         this.javaAssetsSent.catch(() => (this.javaAssetsSent = null));
         return this.javaAssetsSent;
@@ -288,7 +297,7 @@ class Sandbox {
         });
     }
 
-    async compileJava(source: string): Promise<CompileOutcome> {
+    async compileJava(source: string, release: string): Promise<CompileOutcome> {
         try {
             await this.prepareJava();
         } catch (error) {
@@ -298,7 +307,7 @@ class Sandbox {
             };
         }
         const res = await this.request<SandboxCompileResponse>(
-            (id) => ({ type: 'java-compile', id, source }),
+            (id) => ({ type: 'java-compile', id, source, release }),
             COMPILE_TIMEOUT_MS + 15_000,
             (id) => ({
                 kind: 'compile',
@@ -313,14 +322,14 @@ class Sandbox {
     }
 
     /** Java 실시간 진단 (javac만) */
-    async checkJava(source: string) {
+    async checkJava(source: string, release: string) {
         try {
             await this.prepareJava();
         } catch {
             return [];
         }
         const res = await this.request<SandboxCheckResponse>(
-            (id) => ({ type: 'java-check', id, source }),
+            (id) => ({ type: 'java-check', id, source, release }),
             45_000,
             (id) => ({ kind: 'check', id, diagnostics: [] })
         );
@@ -461,12 +470,12 @@ export class RunnerPool {
             return Promise.resolve({ ok: true, diagnostics: '' });
         }
         const kind = lang.runtime;
-        const std = lang.cppStd ?? '';
+        const std = lang.cppStd ?? lang.javaRelease ?? '';
         const key = `${kind}\u0000${std}\u0000${source}`;
         if (this.compileCache?.key === key) return this.compileCache.outcome;
 
         if (kind === 'java') {
-            const outcome = this.sandbox.compileJava(source);
+            const outcome = this.sandbox.compileJava(source, std);
             this.cacheCompile(key, outcome);
             return outcome;
         }
@@ -522,8 +531,8 @@ export class RunnerPool {
     }
 
     /** Java 실시간 진단 (javac만, WebAssembly 생성 없음) */
-    javaCheck(source: string) {
-        return this.sandbox.checkJava(source);
+    javaCheck(source: string, release: string) {
+        return this.sandbox.checkJava(source, release);
     }
 
     private cacheCompile(key: string, outcome: Promise<CompileOutcome>) {
@@ -550,7 +559,7 @@ export class RunnerPool {
     }
 
     private release(worker: RunnerWorker, broken: boolean) {
-        if (broken) {
+        if (broken || worker.crashed) {
             worker.terminate();
             this.workers = this.workers.filter((w) => w !== worker);
         } else {
