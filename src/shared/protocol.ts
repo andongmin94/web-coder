@@ -18,6 +18,11 @@ export type ProblemData = {
     timeLimitSec: number | null;
     /** 시간 제한에 "추가 시간 없음"이 붙은 문제 (언어별 보정 없음). 예전에 저장한 문제에는 없음 */
     noExtraTime?: boolean;
+    /**
+     * 문제에 따로 정한 언어별 시간 제한 (초, 키는 BOJ 언어 이름). 시간 제한이 "하단 참고"인 문제의
+     * "시간 제한" 목록 (예: Java 8: 1.5 초). 여기 있는 언어는 보정 없이 이 값이 제한입니다.
+     */
+    languageTimeLimits?: Record<string, number>;
     memoryLimitMB: number | null;
     limitText: { time: string; memory: string };
     isSpecialJudge: boolean;

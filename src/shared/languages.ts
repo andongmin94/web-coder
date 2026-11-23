@@ -74,8 +74,11 @@ const CPP_STD: Record<string, string> = {
 };
 
 /** BOJ 언어 이름을 로컬 런타임으로 매핑합니다. 지원하지 않으면 null. */
+/** BOJ 언어 이름의 공백을 정리합니다. (폼과 문제 페이지의 표기를 같은 키로 맞춤) */
+export const normalizeLabel = (label: string) => label.replace(/\s+/g, ' ').trim();
+
 export const resolveLanguage = (lang: BojLanguage): ResolvedLanguage | null => {
-    const label = lang.label.replace(/\s+/g, ' ').trim();
+    const label = normalizeLabel(lang.label);
 
     const cpp = /^C\+\+\s?(\d{2})?(?:\s*\((?:Clang|GCC)\))?$/i.exec(label);
     if (cpp) {
@@ -134,8 +137,22 @@ export const judgeMemoryLimitMB = (
  * (C++ wasm은 네이티브의 1.5~2배, CPython wasm은 3~4배쯤 걸림)
  */
 const LOCAL_SLACK: Record<RuntimeKey, number> = { cpp: 3, java: 2, python: 2.5, javascript: 1.5 };
-export const localTimeoutMs = (runtime: RuntimeKey, limitSec: number, noExtraTime = false) =>
-    Math.min(
-        30_000,
-        Math.max(3_000, judgeTimeLimitMs(runtime, limitSec, noExtraTime) * LOCAL_SLACK[runtime])
-    );
+export const localTimeoutMs = (runtime: RuntimeKey, judgeMs: number) =>
+    Math.min(30_000, Math.max(3_000, judgeMs * LOCAL_SLACK[runtime]));
+
+/**
+ * 이 문제에서 이 언어에 백준이 적용하는 시간 제한(ms).
+ * 문제에 언어별 시간이 따로 있으면 그 값(보정 없음), 아니면 언어별 보정 규칙.
+ */
+export const problemTimeLimitMs = (
+    lang: Pick<ResolvedLanguage, 'runtime' | 'label'>,
+    problem: {
+        timeLimitSec: number;
+        noExtraTime?: boolean;
+        languageTimeLimits?: Record<string, number>;
+    }
+) => {
+    const own = problem.languageTimeLimits?.[normalizeLabel(lang.label)];
+    if (own !== undefined) return own * 1000;
+    return judgeTimeLimitMs(lang.runtime, problem.timeLimitSec, problem.noExtraTime);
+};

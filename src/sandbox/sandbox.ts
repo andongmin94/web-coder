@@ -101,6 +101,8 @@ let javaAssets: { wasm: ArrayBuffer; sdk: ArrayBuffer; classlib: ArrayBuffer } |
 let compiler: Worker | null = null;
 let nextCompileId = 1;
 const compiles = new Map<number, (r: CompilerResponse | null) => void>();
+/** 진행 중인 컴파일 수 (중단할 때 컴파일러를 끊을지 판단) */
+let compilingNow = 0;
 
 const getCompiler = () => {
     if (compiler) return compiler;
@@ -138,6 +140,7 @@ const compileJava = async (req: Extract<SandboxRequest, { type: 'java-compile' }
         return;
     }
     const id = nextCompileId++;
+    compilingNow++;
     const res = await new Promise<CompilerResponse | null>((resolve) => {
         const timer = setTimeout(() => {
             compiles.delete(id);
@@ -149,6 +152,7 @@ const compileJava = async (req: Extract<SandboxRequest, { type: 'java-compile' }
         });
         worker.postMessage({ type: 'compile', id, source: req.source, std: '' });
     });
+    compilingNow--;
     if (!res) {
         worker.terminate();
         if (compiler === worker) compiler = null;
@@ -206,6 +210,14 @@ window.addEventListener('message', (event: MessageEvent<SandboxRequest>) => {
             break;
         case 'cancel':
             for (const finish of [...running.values()]) finish({ status: 'cancelled' });
+            // 컴파일 중이면 컴파일러를 끊습니다. (javac는 중간에 멈출 방법이 없어 워커째 끝냄)
+            // 다음 컴파일 때 새로 만들며, 실시간 진단도 같은 워커라 함께 끝납니다.
+            if (compilingNow > 0 && compiler) {
+                compiler.terminate();
+                compiler = null;
+                for (const resolve of [...compiles.values()]) resolve(null);
+                compiles.clear();
+            }
             break;
     }
 });

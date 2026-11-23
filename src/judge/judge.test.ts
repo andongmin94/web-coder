@@ -9,7 +9,12 @@ import {
     isSameWithTolerance,
     normalizeOutput,
 } from './judge.ts';
-import { judgeMemoryLimitMB, judgeTimeLimitMs, resolveLanguage } from '../shared/languages.ts';
+import {
+    judgeMemoryLimitMB,
+    judgeTimeLimitMs,
+    problemTimeLimitMs,
+    resolveLanguage,
+} from '../shared/languages.ts';
 
 test('줄 끝 공백과 마지막 개행은 무시한다', () => {
     assert.ok(isSameOutput('1 2 \n3\n\n', '1 2\n3'));
@@ -111,4 +116,13 @@ test('추가 시간 없음 문제는 언어별 보정 없음', () => {
     assert.equal(judgeTimeLimitMs('python', 1), 5000);
     assert.equal(judgeTimeLimitMs('python', 1, true), 1000);
     assert.equal(judgeTimeLimitMs('java', 2, true), 2000);
+});
+
+test('문제에 정한 언어별 시간 제한은 보정 없이 그대로', () => {
+    const problem = { timeLimitSec: 1, languageTimeLimits: { 'Java 8': 1.5 } };
+    assert.equal(problemTimeLimitMs({ runtime: 'java', label: 'Java 8' }, problem), 1500);
+    assert.equal(problemTimeLimitMs({ runtime: 'java', label: 'Java  8' }, problem), 1500);
+    // 목록에 없는 언어는 보통 규칙
+    assert.equal(problemTimeLimitMs({ runtime: 'java', label: 'Java 11' }, problem), 3000);
+    assert.equal(problemTimeLimitMs({ runtime: 'python', label: 'Python 3' }, problem), 5000);
 });

@@ -4,6 +4,7 @@
 // 그래서 사용자가 문제 페이지(/problem/*)를 열 때 그 페이지에서 읽어 저장해 두고,
 // 제출 페이지는 저장된 데이터를 씁니다.
 import { findTolerance } from '../judge/judge.ts';
+import { normalizeLabel } from '../shared/languages.ts';
 import type { ProblemData, ProblemSection, Sample } from '../shared/protocol.ts';
 
 const text = (el: Element | null | undefined) => (el?.textContent ?? '').replace(/ /g, ' ').trim();
@@ -110,12 +111,20 @@ export const parseProblemDocument = (id: string, doc: Document, origin: string):
 
     const isSpecialJudge = Boolean(doc.querySelector('.problem-label-spj'));
 
+    // "하단 참고" 문제의 언어별 시간 제한 목록 (<li>Java 8: 1.5 초</li>)
+    const languageTimeLimits: Record<string, number> = {};
+    for (const li of doc.querySelectorAll('#problem-time-limit li')) {
+        const match = /^(.+):\s*([\d.]+)\s*초/.exec(text(li));
+        if (match) languageTimeLimits[normalizeLabel(match[1])] = Number(match[2]);
+    }
+
     return {
         id,
         title: text(doc.querySelector('#problem_title')) || `${id}번`,
         url,
         timeLimitSec: parseNumber(time),
         noExtraTime: /추가\s*시간\s*없음/.test(time),
+        languageTimeLimits,
         memoryLimitMB: parseNumber(memory),
         limitText: { time, memory },
         isSpecialJudge,
@@ -131,7 +140,7 @@ const CACHE_LIMIT = 100;
 export const problemKey = (id: string) => `problem:${id}`;
 const INDEX_KEY = 'problem-index';
 
-export const saveProblem = async (problem: ProblemData) => {
+const writeProblem = async (problem: ProblemData) => {
     const { [INDEX_KEY]: index = [] } = (await chrome.storage.local.get(INDEX_KEY)) as {
         [INDEX_KEY]?: string[];
     };
@@ -140,6 +149,15 @@ export const saveProblem = async (problem: ProblemData) => {
     await chrome.storage.local.set({ [problemKey(problem.id)]: problem, [INDEX_KEY]: next });
     if (evicted.length) await chrome.storage.local.remove(evicted.map(problemKey));
 };
+
+/**
+ * 문제 목록(index)은 읽고-고쳐-쓰기라서, 여러 탭이 동시에 문제를 열면 한쪽이 덮어써
+ * 목록에서 빠진(지워지지 않는) 문제가 남을 수 있습니다. 같은 사이트의 탭끼리 Web Locks로 차례를 맞춥니다.
+ */
+export const saveProblem = (problem: ProblemData) =>
+    navigator.locks
+        ? navigator.locks.request('webcoder-problem-index', () => writeProblem(problem))
+        : writeProblem(problem);
 
 export const loadProblem = async (id: string): Promise<ProblemData | null> => {
     const data = await chrome.storage.local.get(problemKey(id));

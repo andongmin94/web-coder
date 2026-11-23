@@ -11,7 +11,7 @@ import {
 import {
     RUNTIMES,
     judgeMemoryLimitMB,
-    judgeTimeLimitMs,
+    problemTimeLimitMs,
     localTimeoutMs,
     resolveLanguages,
     type ResolvedLanguage,
@@ -382,7 +382,7 @@ const DEFAULT_TIME_LIMIT_SEC = 2;
 /** 지금 언어에 BOJ가 적용하는 시간 제한. 문제 정보가 없으면 null (경고를 띄우지 않음) */
 const judgeLimitMs = () =>
     current && problem?.timeLimitSec
-        ? judgeTimeLimitMs(current.runtime, problem.timeLimitSec, problem.noExtraTime)
+        ? problemTimeLimitMs(current, { ...problem, timeLimitSec: problem.timeLimitSec })
         : null;
 
 /** 실행(불러오기·컴파일 포함)을 시작한 시각과, 경과 시간을 다시 그리는 타이머 */
@@ -473,8 +473,10 @@ const runTests = async (only?: string) => {
         });
         const timeout = localTimeoutMs(
             lang.runtime,
-            problem?.timeLimitSec ?? DEFAULT_TIME_LIMIT_SEC,
-            problem?.noExtraTime
+            problemTimeLimitMs(lang, {
+                ...problem,
+                timeLimitSec: problem?.timeLimitSec ?? DEFAULT_TIME_LIMIT_SEC,
+            })
         );
         const runStarted = performance.now();
         await Promise.all(
