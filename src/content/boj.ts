@@ -135,6 +135,21 @@ const readFormData = async (form: HTMLFormElement): Promise<SubmitFormData> => {
 
 let removeListener: (() => void) | null = null;
 
+/**
+ * 제출 버튼을 누른 뒤 페이지가 채점 현황으로 넘어가지 않으면(보안 확인 창이 떴거나 BOJ가 막은 경우)
+ * 웹 코더 화면에 가려 사용자가 아무것도 할 수 없으므로, 잠시 뒤 원래 제출 화면을 보여 줍니다.
+ * 코드는 이미 원래 폼에 채워져 있습니다.
+ */
+const SUBMIT_NAVIGATION_WAIT_MS = 8000;
+const watchSubmitNavigation = () => {
+    const timer = window.setTimeout(() => {
+        showNativeForm(
+            '제출 화면이 넘어가지 않았습니다. 코드를 원래 제출 폼에 옮겨 두었으니, 보안 확인이 떴다면 완료한 뒤 제출 버튼을 다시 눌러 주세요.'
+        );
+    }, SUBMIT_NAVIGATION_WAIT_MS);
+    window.addEventListener('pagehide', () => clearTimeout(timer), { once: true });
+};
+
 const showNativeForm = (notice?: string) => {
     removeListener?.();
     removeListener = null;
@@ -147,6 +162,8 @@ const showNativeForm = (notice?: string) => {
     if (!form) return;
     injectStyle();
     form.classList.remove(HIDDEN_CLASS);
+    // 숨겨진 동안 코드를 채운 BOJ 에디터는 다시 그려야 내용이 제대로 보입니다.
+    void callMain({ type: 'refresh-editor' });
 
     document.querySelector('.webcoder-open')?.remove();
     document.querySelector('.webcoder-notice')?.remove();
@@ -251,6 +268,7 @@ const mount = async () => {
                 return;
             }
             post({ type: 'submit-result', ok: reply.ok, message: reply.message });
+            if (reply.ok) watchSubmitNavigation();
         }
     };
 

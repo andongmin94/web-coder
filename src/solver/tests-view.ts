@@ -6,6 +6,7 @@ import {
     isSameWithTolerance,
     normalizeOutput,
 } from '../judge/judge.ts';
+import { OUTPUT_LIMIT } from '../runner/output.ts';
 import type { RunResult } from '../runner/types.ts';
 import { h } from './dom.ts';
 import { linkifyLocations } from './locations.ts';
@@ -71,6 +72,8 @@ const VERDICT_TEXT: Record<Verdict, string> = {
 type Callbacks = {
     onToggle: (id: string) => void;
     onChangeCustom: (id: string, patch: { input?: string; expected?: string }) => void;
+    /** 파일로 불러오기처럼 값을 통째로 바꿀 때 (카드를 다시 그림) */
+    onReplaceCustom: (id: string, patch: { input?: string; expected?: string }) => void;
     onDeleteCustom: (id: string) => void;
     /** 에러의 소스 위치(줄, 열)로 에디터 이동 */
     onJumpToSource: (line: number, column: number | null) => void;
@@ -94,13 +97,50 @@ const MB = 1024 * 1024;
 const formatMemory = (bytes: number) =>
     bytes >= 100 * MB ? `${Math.round(bytes / MB)}MB` : `${(bytes / MB).toFixed(1)}MB`;
 
+/**
+ * 이보다 큰 입력·출력은 앞부분만 보여 줍니다. 수 MB를 그대로 textarea·pre에 넣으면
+ * 편집기 선택 처리 때마다 그 글자를 다시 배치하느라 화면이 수십 초씩 멈춥니다.
+ */
+const BIG_TEXT = 256 << 10;
+const PREVIEW_CHARS = 16 << 10;
+
+const formatSize = (chars: number) =>
+    chars >= MB ? `${(chars / MB).toFixed(1)}MB` : `${Math.max(1, Math.round(chars / 1024))}KB`;
+const countLines = (text: string) => {
+    let n = 0;
+    for (let i = text.indexOf('\n'); i >= 0; i = text.indexOf('\n', i + 1)) n++;
+    return text.endsWith('\n') ? n : n + 1;
+};
+
+/** 큰 글은 앞부분과 크기만 */
+const previewText = (text: string) =>
+    text.length > BIG_TEXT
+        ? [
+              text.slice(0, PREVIEW_CHARS),
+              h(
+                  'span',
+                  { class: 'io-more' },
+                  `\n… 앞부분만 보여 줍니다 (전체 ${formatSize(text.length)}, ${countLines(text).toLocaleString()}줄)`
+              ),
+          ]
+        : text.length
+          ? text.replace(/\n$/, '')
+          : ' ';
+
 const plainBlock = (label: string | Node[], text: string | (Node | string)[]) =>
     h('div', { class: 'io' }, [
         h('div', { class: 'io-label' }, [h('span', { class: 'io-title' }, label)]),
-        h('pre', {}, typeof text !== 'string' ? text : text.length ? text.replace(/\n$/, '') : ' '),
+        h('pre', {}, typeof text !== 'string' ? text : previewText(text)),
     ]);
 
 /** 실제 출력에서 기대 출력과 다른 줄을 빨간 글씨로, 그 안에서 다른 글자는 밑줄로 보여 줍니다. */
+const sameLineAt = (
+    a: string[],
+    e: string[],
+    i: number,
+    sameLine: (a: string, e: string) => boolean
+) => a[i] !== undefined && e[i] !== undefined && sameLine(a[i], e[i]);
+
 const diffBlocks = (
     expected: string,
     actual: string,
@@ -109,6 +149,11 @@ const diffBlocks = (
 ) => {
     const e = normalizeOutput(expected).split('\n');
     const a = normalizeOutput(actual).split('\n');
+    // 처음 다른 줄이 화면에 들어오도록, 그 줄 조금 위부터 보여 줍니다.
+    let firstDiff = 0;
+    while (firstDiff < Math.max(a.length, e.length) && sameLineAt(a, e, firstDiff, sameLine))
+        firstDiff++;
+    const from = Math.max(0, firstDiff - 20);
     /** 다른 줄은 그 안에서 실제로 다른 글자만 한 번 더 강조합니다. (공백 하나 차이도 보이게) */
     const lineContent = (line: string, other: string | undefined): (Node | string)[] => {
         if (other === undefined || line === other) return [line || ' '];
@@ -129,8 +174,16 @@ const diffBlocks = (
     };
     const render = (lines: string[], other: string[] | null) => {
         const pre = h('pre');
-        const shown = Math.min(lines.length, MAX_LINES);
-        for (let i = 0; i < shown; i++) {
+        const shown = Math.min(lines.length, from + MAX_LINES);
+        if (from > 0 && lines.length > 0)
+            pre.append(
+                h(
+                    'span',
+                    { class: 'diff-line io-more' },
+                    `… 앞의 같은 ${Math.min(from, lines.length)}줄 생략`
+                )
+            );
+        for (let i = from; i < shown; i++) {
             const bad = other !== null && (other[i] === undefined || !sameLine(lines[i], other[i]));
             pre.append(
                 h(
@@ -156,19 +209,57 @@ const diffBlocks = (
     ];
 };
 
+/** 파일 고르기 → 글자로 읽어 넘깁니다. (큰 입력을 붙여 넣지 않고 넣을 수 있게) */
+const pickTextFile = (onText: (text: string) => void) => {
+    const input = h('input', { type: 'file', accept: '.txt,.in,.out,.ans,text/plain' });
+    input.addEventListener('change', async () => {
+        const file = input.files?.[0];
+        if (file) onText((await file.text()).replace(/\r\n?/g, '\n'));
+    });
+    input.click();
+};
+
 const editable = (
     label: string,
     value: string,
     placeholder: string,
-    onInput: (v: string) => void
+    onInput: (v: string) => void,
+    onReplace: (v: string) => void
 ) => {
+    const fileLink = h(
+        'button',
+        { class: 'link-button io-file', type: 'button', onclick: () => pickTextFile(onReplace) },
+        '파일에서 불러오기'
+    );
+    const head = h('div', { class: 'io-label' }, [
+        h('span', { class: 'io-title' }, label),
+        fileLink,
+    ]);
+    // 큰 값은 고쳐 쓸 일이 거의 없고 화면만 느려지므로 요약과 비우기만 둡니다.
+    if (value.length > BIG_TEXT) {
+        return h('div', { class: 'io' }, [
+            head,
+            h('pre', {}, previewText(value)),
+            h('div', {}, [
+                h(
+                    'button',
+                    {
+                        class: 'link-button link-button-danger',
+                        type: 'button',
+                        onclick: () => onReplace(''),
+                    },
+                    '비우기'
+                ),
+            ]),
+        ]);
+    }
     const area = h('textarea', { class: 'io-edit', spellcheck: 'false', placeholder, rows: 3 });
     area.value = value;
-    area.addEventListener('input', () => onInput(area.value));
-    return h('div', { class: 'io' }, [
-        h('div', { class: 'io-label' }, [h('span', { class: 'io-title' }, label)]),
-        area,
-    ]);
+    // 큰 값을 붙여 넣으면 바로 요약 화면으로 바꿉니다. (큰 textarea가 남아 있으면 화면이 계속 느림)
+    area.addEventListener('input', () =>
+        area.value.length > BIG_TEXT ? onReplace(area.value) : onInput(area.value)
+    );
+    return h('div', { class: 'io' }, [head, area]);
 };
 
 export const renderTest = (
@@ -258,11 +349,19 @@ export const renderTest = (
     const body = h('div', { class: 'test-body' });
     if (test.kind === 'custom') {
         body.append(
-            editable('입력', test.input, '입력값', (v) =>
-                callbacks.onChangeCustom(test.id, { input: v })
+            editable(
+                '입력',
+                test.input,
+                '입력값',
+                (v) => callbacks.onChangeCustom(test.id, { input: v }),
+                (v) => callbacks.onReplaceCustom(test.id, { input: v })
             ),
-            editable('기대 출력', test.expected, '비우면 비교하지 않고 출력만 봅니다', (v) =>
-                callbacks.onChangeCustom(test.id, { expected: v })
+            editable(
+                '기대 출력',
+                test.expected,
+                '비우면 비교하지 않고 출력만 봅니다',
+                (v) => callbacks.onChangeCustom(test.id, { expected: v }),
+                (v) => callbacks.onReplaceCustom(test.id, { expected: v })
             )
         );
     } else {
@@ -338,7 +437,13 @@ export const renderTest = (
             );
         }
         if (state.result.output.truncated)
-            body.append(h('p', { class: 'io-note' }, '출력이 1MB를 넘어 잘랐습니다.'));
+            body.append(
+                h(
+                    'p',
+                    { class: 'io-note' },
+                    `출력이 ${formatSize(OUTPUT_LIMIT)}를 넘어 잘랐습니다.`
+                )
+            );
     } else if (test.kind === 'sample') {
         body.append(plainBlock('기대 출력', test.expected));
     }

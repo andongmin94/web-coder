@@ -115,6 +115,7 @@ export const parseProblemDocument = (id: string, doc: Document, origin: string):
         title: text(doc.querySelector('#problem_title')) || `${id}번`,
         url,
         timeLimitSec: parseNumber(time),
+        noExtraTime: /추가\s*시간\s*없음/.test(time),
         memoryLimitMB: parseNumber(memory),
         limitText: { time, memory },
         isSpecialJudge,

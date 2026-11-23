@@ -156,9 +156,29 @@ const showToast = (message: string, kind: 'info' | 'error' = 'info') => {
 
 // ── 코드 저장 (디바운스) ─────────────────────────────────────────
 let saveTimer = 0;
+/**
+ * 코드·테스트 저장. 실패(저장 공간 부족 등)를 그냥 넘기면 새로고침 때 고친 내용이 사라지므로 알립니다.
+ * (같은 알림이 연달아 뜨지 않게 한 번만)
+ */
+let saveErrorShown = false;
+const persist = (write: Promise<unknown>) => {
+    write.then(
+        () => (saveErrorShown = false),
+        (error: unknown) => {
+            if (saveErrorShown) return;
+            saveErrorShown = true;
+            showToast(
+                `저장하지 못했습니다: ${error instanceof Error ? error.message : String(error)}. ` +
+                    '지금 코드는 따로 복사해 두세요.',
+                'error'
+            );
+        }
+    );
+};
+
 const saveCodeNow = () => {
     clearTimeout(saveTimer);
-    if (problemId && current) void storage.setCode(problemId, current.id, editor.value);
+    if (problemId && current) persist(storage.setCode(problemId, current.id, editor.value));
 };
 const scheduleSave = () => {
     clearTimeout(saveTimer);
@@ -220,15 +240,20 @@ const callbacks = {
         const test = allTests().find((t) => t.id === id);
         if (test) renderOne(test);
     },
+    onReplaceCustom: (id: string, patch: { input?: string; expected?: string }) => {
+        callbacks.onChangeCustom(id, patch);
+        const test = allTests().find((t) => t.id === id);
+        if (test) renderOne(test);
+    },
     onChangeCustom: (id: string, patch: { input?: string; expected?: string }) => {
         customTests = customTests.map((t) => (t.id === id ? { ...t, ...patch } : t));
-        if (problemId) void storage.setCustomTests(problemId, customTests);
+        if (problemId) persist(storage.setCustomTests(problemId, customTests));
     },
     onDuplicate: (test: TestCase) => {
         const id = newTestId();
         customTests = [...customTests, { id, input: test.input, expected: test.expected }];
         openTests.add(id);
-        if (problemId) void storage.setCustomTests(problemId, customTests);
+        if (problemId) persist(storage.setCustomTests(problemId, customTests));
         renderTests();
         const card = testList.querySelector(`[data-id="${id}"]`);
         card?.scrollIntoView({ block: 'nearest' });
@@ -238,7 +263,7 @@ const callbacks = {
         customTests = customTests.filter((t) => t.id !== id);
         testStates.delete(id);
         openTests.delete(id);
-        if (problemId) void storage.setCustomTests(problemId, customTests);
+        if (problemId) persist(storage.setCustomTests(problemId, customTests));
         renderTests();
     },
 };
@@ -357,7 +382,7 @@ const DEFAULT_TIME_LIMIT_SEC = 2;
 /** 지금 언어에 BOJ가 적용하는 시간 제한. 문제 정보가 없으면 null (경고를 띄우지 않음) */
 const judgeLimitMs = () =>
     current && problem?.timeLimitSec
-        ? judgeTimeLimitMs(current.runtime, problem.timeLimitSec)
+        ? judgeTimeLimitMs(current.runtime, problem.timeLimitSec, problem.noExtraTime)
         : null;
 
 /** 실행(불러오기·컴파일 포함)을 시작한 시각과, 경과 시간을 다시 그리는 타이머 */
@@ -448,7 +473,8 @@ const runTests = async (only?: string) => {
         });
         const timeout = localTimeoutMs(
             lang.runtime,
-            problem?.timeLimitSec ?? DEFAULT_TIME_LIMIT_SEC
+            problem?.timeLimitSec ?? DEFAULT_TIME_LIMIT_SEC,
+            problem?.noExtraTime
         );
         const runStarted = performance.now();
         await Promise.all(
@@ -529,14 +555,22 @@ const intelFor = (lang: ResolvedLanguage): LanguageIntel => {
 };
 
 // ── 언어 ─────────────────────────────────────────────────────────
+/** 언어를 빠르게 연달아 바꿀 때 늦게 끝난 앞의 전환을 버리기 위한 번호 */
+let switchSeq = 0;
+
 const switchLanguage = async (lang: ResolvedLanguage, initialCode?: string) => {
+    const seq = ++switchSeq;
     if (current) saveCodeNow();
-    current = lang;
     languageSelect.value = lang.id;
     void storage.updatePrefs({ lastLanguageLabel: lang.label });
 
     const saved = problemId ? await storage.getCode(problemId, lang.id) : undefined;
     const code = initialCode ?? saved ?? (await templateFor(lang.runtime));
+    // 기다리는 사이 다른 언어로 또 바꿨으면 그쪽이 이깁니다.
+    // current는 새 코드를 에디터에 올린 뒤에 바꿉니다. 그 전에 바꾸면 에디터에 남은 이전 언어의 코드가
+    // 새 언어 이름으로 저장됩니다. (빠르게 두 번 바꿀 때 코드가 덮어써지던 문제)
+    if (seq !== switchSeq) return;
+    current = lang;
     editor.load(code, RUNTIMES[lang.runtime], intelFor(lang));
     void updateTemplateMenu();
     pool.warmUp(lang);
@@ -805,7 +839,7 @@ addTestButton.addEventListener('click', () => {
     const id = newTestId();
     customTests = [...customTests, { id, input: '', expected: '' }];
     openTests.add(id);
-    if (problemId) void storage.setCustomTests(problemId, customTests);
+    if (problemId) persist(storage.setCustomTests(problemId, customTests));
     renderTests();
     testList.querySelector<HTMLTextAreaElement>(`[data-id="${id}"] textarea`)?.focus();
 });

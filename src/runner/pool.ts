@@ -193,7 +193,11 @@ const JAVA_ASSETS = {
 
 class Sandbox {
     private frame: HTMLIFrameElement;
-    private ready: Promise<boolean>;
+    /** sandbox 페이지가 준비됐다는 신호 (한 번 오면 계속 true) */
+    private isReady = false;
+    private readyPromise: Promise<true>;
+    /** cancelAll 횟수. 준비를 기다리던 실행이 그사이 중단됐는지 알아보는 데 씁니다. */
+    private cancelSeq = 0;
     private javaAssetsSent: Promise<void> | null = null;
     private nextId = 1;
     private pending = new Map<
@@ -206,13 +210,17 @@ class Sandbox {
         this.frame.src = SANDBOX_URL;
         this.frame.hidden = true;
         this.frame.setAttribute('sandbox', 'allow-scripts');
-        let markReady!: (ok: boolean) => void;
-        this.ready = new Promise((r) => (markReady = r));
-        setTimeout(() => markReady(false), SANDBOX_READY_TIMEOUT_MS);
+        let markReady!: () => void;
+        this.readyPromise = new Promise((r) => {
+            markReady = () => {
+                this.isReady = true;
+                r(true);
+            };
+        });
         window.addEventListener('message', (e: MessageEvent<SandboxResponse>) => {
             if (e.source !== this.frame.contentWindow) return;
             if (e.data.kind === 'ready') {
-                markReady(true);
+                markReady();
                 return;
             }
             const resolve = this.pending.get(e.data.id);
@@ -223,6 +231,18 @@ class Sandbox {
         document.body.appendChild(this.frame);
     }
 
+    /**
+     * 준비될 때까지 기다리되, 이번 요청은 SANDBOX_READY_TIMEOUT_MS까지만 기다립니다.
+     * (느린 PC에서 늦게 준비돼도 다음 요청부터는 정상으로 돌도록 영구 실패로 만들지 않습니다)
+     */
+    private waitReady(): Promise<boolean> {
+        if (this.isReady) return Promise.resolve(true);
+        return Promise.race([
+            this.readyPromise,
+            new Promise<false>((r) => setTimeout(() => r(false), SANDBOX_READY_TIMEOUT_MS)),
+        ]);
+    }
+
     private post(message: SandboxRequest, transfer: Transferable[] = []) {
         // sandbox 페이지는 opaque origin이라 targetOrigin을 '*'로 보냅니다. (받는 쪽은 frame이 고정)
         this.frame.contentWindow?.postMessage(message, '*', transfer);
@@ -231,7 +251,7 @@ class Sandbox {
     /** Java 컴파일러 파일을 읽어 sandbox로 넘깁니다. (sandbox는 확장 리소스를 직접 못 읽음) */
     prepareJava() {
         this.javaAssetsSent ??= (async () => {
-            if (!(await this.ready)) throw new Error('sandbox 페이지를 불러오지 못했습니다.');
+            if (!(await this.waitReady())) throw new Error('sandbox 페이지를 불러오지 못했습니다.');
             const read = async (path: string) => {
                 const response = await fetch(path);
                 if (!response.ok) throw new Error(`${path}를 불러오지 못했습니다.`);
@@ -313,7 +333,12 @@ class Sandbox {
         stdin: string,
         timeoutMs: number
     ): Promise<RunResult> {
-        if (!(await this.ready)) {
+        const cancelSeq = this.cancelSeq;
+        const ready = await this.waitReady();
+        // 준비를 기다리는 사이 중단했으면 실행하지 않습니다. (준비 전 보낸 중단 신호는 받을 곳이 없음)
+        if (cancelSeq !== this.cancelSeq)
+            return { status: 'cancelled', output: EMPTY_OUTPUT, timeMs: 0 };
+        if (!ready) {
             return {
                 status: 'internal-error',
                 output: EMPTY_OUTPUT,
@@ -344,6 +369,7 @@ class Sandbox {
     }
 
     cancelAll() {
+        this.cancelSeq++;
         this.post({ type: 'cancel' });
     }
 }

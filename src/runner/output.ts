@@ -1,6 +1,10 @@
 // stdout/stderr를 따로 모으고 출력 제한을 겁니다.
 
-export const OUTPUT_LIMIT = 1 << 20; // 1MB
+/**
+ * 출력 제한. 백준은 정답보다 훨씬 많이 출력할 때만 출력 초과를 주므로, 정렬한 수 100만 개(약 7MB) 같은
+ * 정상적인 큰 출력은 받아야 합니다. 화면에는 앞부분만 보여 줍니다. (tests-view.ts)
+ */
+export const OUTPUT_LIMIT = 32 << 20; // 32MB
 
 export class OutputLimitError extends Error {
     constructor() {

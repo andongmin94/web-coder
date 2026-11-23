@@ -948,6 +948,18 @@ textarea {
     background: var(--fail);
 }
 
+/* 큰 입력·출력에서 생략했다는 안내 */
+.io-more {
+    color: var(--fg-muted);
+    font-family: var(--boj-font);
+    font-size: 12.5px;
+}
+
+.io-label .io-file {
+    margin-left: auto;
+    font-size: 12px;
+}
+
 .io-edit::placeholder {
     color: var(--fg-faint);
     font: 13px var(--boj-font);

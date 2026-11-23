@@ -16,6 +16,8 @@ export type ProblemData = {
     title: string;
     url: string;
     timeLimitSec: number | null;
+    /** 시간 제한에 "추가 시간 없음"이 붙은 문제 (언어별 보정 없음). 예전에 저장한 문제에는 없음 */
+    noExtraTime?: boolean;
     memoryLimitMB: number | null;
     limitText: { time: string; memory: string };
     isSpecialJudge: boolean;
@@ -59,6 +61,8 @@ export const MAIN_REPLY_EVENT = 'webcoder:main-reply';
 
 export type MainRequest =
     | { id: number; type: 'read-source' }
+    /** 숨겨져 있던 원래 폼을 다시 보일 때 BOJ 에디터(CodeMirror 5)를 다시 그리게 함 */
+    | { id: number; type: 'refresh-editor' }
     | { id: number; type: 'submit'; languageId: string; source: string; codeOpen: string | null };
 
 export type MainReply = {

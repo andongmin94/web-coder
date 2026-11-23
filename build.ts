@@ -64,7 +64,8 @@ const manifest = {
     sandbox: {
         pages: ['sandbox.html'],
     },
-    permissions: ['storage'],
+    // unlimitedStorage: 문제·코드·큰 내 테스트를 저장하다 10MB 한도에 걸려 저장이 조용히 실패하지 않게
+    permissions: ['storage', 'unlimitedStorage'],
     content_security_policy: {
         extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'",
         sandbox:

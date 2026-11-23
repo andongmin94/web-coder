@@ -8,7 +8,12 @@ import {
 } from '../shared/protocol.ts';
 
 type CodeMirrorHost = HTMLElement & {
-    CodeMirror?: { getValue(): string; setValue(v: string): void; save?(): void };
+    CodeMirror?: {
+        getValue(): string;
+        setValue(v: string): void;
+        save?(): void;
+        refresh?(): void;
+    };
 };
 type JQueryLike = (el: Element) => { val(v: string): unknown; trigger(name: string): unknown };
 
@@ -104,7 +109,9 @@ window.addEventListener(MAIN_REQUEST_EVENT, (event) => {
         reply =
             req.type === 'read-source'
                 ? { id: req.id, ok: true, source: readSource() }
-                : submit(req);
+                : req.type === 'refresh-editor'
+                  ? (codeMirror()?.refresh?.(), { id: req.id, ok: true })
+                  : submit(req);
     } catch (error) {
         reply = {
             id: req.id,

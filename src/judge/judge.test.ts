@@ -9,7 +9,7 @@ import {
     isSameWithTolerance,
     normalizeOutput,
 } from './judge.ts';
-import { judgeMemoryLimitMB, resolveLanguage } from '../shared/languages.ts';
+import { judgeMemoryLimitMB, judgeTimeLimitMs, resolveLanguage } from '../shared/languages.ts';
 
 test('줄 끝 공백과 마지막 개행은 무시한다', () => {
     assert.ok(isSameOutput('1 2 \n3\n\n', '1 2\n3'));
@@ -105,4 +105,10 @@ test('한 줄 안에서 다른 구간', () => {
     assert.deepEqual(differingRange('hello world', 'hello  world'), { start: 6, endA: 6, endB: 7 });
     assert.deepEqual(differingRange('same', 'same'), { start: 4, endA: 4, endB: 4 });
     assert.deepEqual(differingRange('', 'x'), { start: 0, endA: 0, endB: 1 });
+});
+
+test('추가 시간 없음 문제는 언어별 보정 없음', () => {
+    assert.equal(judgeTimeLimitMs('python', 1), 5000);
+    assert.equal(judgeTimeLimitMs('python', 1, true), 1000);
+    assert.equal(judgeTimeLimitMs('java', 2, true), 2000);
 });

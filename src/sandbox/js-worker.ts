@@ -28,7 +28,8 @@ export function jsWorkerMain(prelude: string) {
 
     scope.onmessage = async (event: MessageEvent<{ source: string; stdin: string }>) => {
         const { source, stdin } = event.data;
-        const LIMIT = 1 << 20;
+        // runner/output.ts의 OUTPUT_LIMIT과 같게 (이 함수는 바깥 값을 쓸 수 없음)
+        const LIMIT = 32 << 20;
         let stdout = '';
         let stderr = '';
         let truncated = false;

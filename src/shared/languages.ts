@@ -105,9 +105,11 @@ export const resolveLanguages = (langs: BojLanguage[]): ResolvedLanguage[] =>
 /**
  * BOJ가 언어별로 늘려 주는 시간 제한 (https://help.acmicpc.net/language/info).
  * C++는 그대로, Java는 ×2+1초, Python·PyPy·node.js는 ×3+2초.
+ * 문제에 "추가 시간 없음"이 붙어 있으면 모든 언어가 같은 제한입니다.
  */
-export const judgeTimeLimitMs = (runtime: RuntimeKey, limitSec: number) => {
+export const judgeTimeLimitMs = (runtime: RuntimeKey, limitSec: number, noExtraTime = false) => {
     const base = limitSec * 1000;
+    if (noExtraTime) return base;
     if (runtime === 'java') return base * 2 + 1000;
     if (runtime === 'python' || runtime === 'javascript') return base * 3 + 2000;
     return base;
@@ -132,5 +134,8 @@ export const judgeMemoryLimitMB = (
  * (C++ wasm은 네이티브의 1.5~2배, CPython wasm은 3~4배쯤 걸림)
  */
 const LOCAL_SLACK: Record<RuntimeKey, number> = { cpp: 3, java: 2, python: 2.5, javascript: 1.5 };
-export const localTimeoutMs = (runtime: RuntimeKey, limitSec: number) =>
-    Math.min(30_000, Math.max(3_000, judgeTimeLimitMs(runtime, limitSec) * LOCAL_SLACK[runtime]));
+export const localTimeoutMs = (runtime: RuntimeKey, limitSec: number, noExtraTime = false) =>
+    Math.min(
+        30_000,
+        Math.max(3_000, judgeTimeLimitMs(runtime, limitSec, noExtraTime) * LOCAL_SLACK[runtime])
+    );
