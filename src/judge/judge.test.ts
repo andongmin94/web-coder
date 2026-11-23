@@ -79,6 +79,19 @@ test('문제 본문에서 허용 오차 찾기', () => {
     assert.equal(findTolerance('답이 여러 가지면 아무거나 출력한다.'), null);
 });
 
+test('허용 오차: 계수, 괄호 지수, 소수점, 날짜', () => {
+    const close = (actual: number | null, expected: number) =>
+        assert.ok(actual !== null && Math.abs(actual - expected) < expected * 1e-9, `${actual}`);
+    close(findTolerance('정답과의 오차가 1.0×10^{-6} 이하이면 정답으로 인정한다.'), 1e-6);
+    close(findTolerance('절대 오차가 2×10^{-3} 이하면 맞는다.'), 2e-3);
+    close(findTolerance('오차는 10^(-6)까지 허용한다.'), 1e-6);
+    close(findTolerance('상대 오차 또는 절대 오차가 1.5e-7 이하인 답을 정답으로 한다.'), 1.5e-7);
+    // 날짜·범위 속의 10은 오차가 아님
+    assert.equal(findTolerance('2020-10-12에 추가된 문제로, 오차는 따로 없다.'), null);
+    // 소수점이 있어도 문장이 끊기지 않음 (뒤 문장의 값과 섞이지 않음)
+    close(findTolerance('출력은 소수점 아래 6자리. 오차 10-9 이하는 정답.'), 1e-9);
+});
+
 test('BOJ 언어별 메모리 제한', () => {
     assert.equal(judgeMemoryLimitMB({ runtime: 'cpp', label: 'C++17' }, 128), 128);
     assert.equal(judgeMemoryLimitMB({ runtime: 'python', label: 'Python 3' }, 128), 288);

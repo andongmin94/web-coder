@@ -57,16 +57,27 @@ export const hasDecimalNumber = (text: string) =>
         .some((token) => isNumberToken(token) && /[.e]/i.test(token));
 
 /**
- * 문제 본문에서 허용 오차를 찾습니다. "오차"가 들어간 문장의 10^{-9}, 10-9(위첨자), 1e-9 꼴.
+ * 문제 본문에서 허용 오차를 찾습니다. "오차"가 들어간 문장에서
+ * 10^{-9}, 10^(-9), 10-9(위첨자가 글자로 풀린 것), 2×10^{-3}, 1.0 × 10^{-6}, 1e-9 꼴.
  * 찾지 못하면 null.
  */
 export const findTolerance = (text: string): number | null => {
-    for (const sentence of text.split(/[.。\n]|다\s/)) {
+    const DASH = '[-−–]';
+    const POWER = `10\\s*(?:\\^\\s*)?[{(]?\\s*${DASH}\\s*(\\d{1,2})(?!\\d)\\s*[})]?`;
+    // 앞에 붙은 계수 (2×10^{-3}, 1.0 x 10^{-6})
+    const withMantissa = new RegExp(`(\\d+(?:\\.\\d+)?)\\s*(?:×|\\\\times|\\*|x)\\s*${POWER}`, 'i');
+    // 숫자나 '-' 바로 뒤의 10은 날짜·범위의 일부라서 제외 (2020-10-12)
+    const bare = new RegExp(`(?<![\\d.\\-−–])${POWER}`);
+    const exponent = /(?<![\d.])(\d+(?:\.\d+)?)e-(\d{1,2})\b/i;
+    // 소수점(1.0)은 문장을 끊지 않도록, 숫자 사이가 아닌 마침표와 줄바꿈에서만 나눕니다.
+    for (const sentence of text.split(/(?<!\d)\.|\.(?!\d)|[。\n]/)) {
         if (!/오차|error/i.test(sentence)) continue;
-        const match =
-            /10\s*(?:\^\s*\{?\s*)?[-−–]\s*(\d{1,2})\s*\}?/.exec(sentence) ??
-            /\b1e-(\d{1,2})\b/i.exec(sentence);
+        let match = withMantissa.exec(sentence);
+        if (match) return Number(match[1]) * 10 ** -Number(match[2]);
+        match = bare.exec(sentence);
         if (match) return 10 ** -Number(match[1]);
+        match = exponent.exec(sentence);
+        if (match) return Number(match[1]) * 10 ** -Number(match[2]);
     }
     return null;
 };

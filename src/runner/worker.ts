@@ -1,6 +1,6 @@
 // 실행 워커 (C++ 결과물, Python, node.js 깊은 재귀 모드). Java·JS는 eval이 필요해 sandbox 페이지에서 실행합니다. 시간 초과 시 메인 쪽 RunnerPool이 terminate 합니다.
 import { prepareCpp } from './cpp.ts';
-import { runNodeDeep } from './node-deep.ts';
+import { runNodeDeep, warmUpNodeDeep } from './node-deep.ts';
 import { setProgressSink } from './output.ts';
 import { runPython, warmUpPython } from './python.ts';
 import type { ProcessOutput, RunRequest, WorkerRequest, WorkerResponse } from './types.ts';
@@ -30,6 +30,7 @@ const prepare = async (req: RunRequest): Promise<Execute> => {
             await warmUpPython();
             return () => runPython(req.source ?? '', req.stdin);
         case 'javascript':
+            await warmUpNodeDeep();
             return () => runNodeDeep(req.source ?? '', req.stdin);
     }
 };

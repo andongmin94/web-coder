@@ -13,12 +13,12 @@ node.js 코드는 sandbox 페이지의 V8 워커에서 실행합니다. 그런�
   QuickJS에 없는 `TextEncoder`, `TextDecoder`, 타이머는 `src/runner/node-deep-boot.js.txt`가 채웁니다.
 - 깊이 약 60만까지 됩니다. 단순 재귀 30만이 0.15초쯤 걸립니다. (V8보다 수십 배 느림)
 
-| 파일                              | 내용                                       |
-| --------------------------------- | ------------------------------------------ |
-| `public/wasm/quickjs-0.18.0.wasm` | QuickJS-ng 0.18.0 + `main.c` (WASI 실행기) |
-| `public/wasm/quickjs-LICENSE.txt` | QuickJS 라이선스 (MIT)                     |
+| 파일                              | 내용                                         |
+| --------------------------------- | -------------------------------------------- |
+| `public/wasm/quickjs-0.18.0.wasm` | QuickJS-ng 0.18.0 + `main.c` (WASI 실행기)   |
+| `public/wasm/quickjs-LICENSE.txt` | QuickJS 라이선스 (MIT)                       |
 | `tools/quickjs/main.c`            | 실행기: std, os를 전역에 올리고 boot.js 실행 |
-| `tools/quickjs/build.mjs`         | 빌드 스크립트                              |
+| `tools/quickjs/build.mjs`         | 빌드 스크립트                                |
 
 ## 다시 만들기
 
@@ -33,6 +33,17 @@ node tools/quickjs/build.mjs quickjs-src public/wasm/quickjs-0.18.0.wasm
 
 컴파일러는 확장이 쓰는 YoWASP clang(`node_modules/@yowasp/clang`)을 node에서 실행하므로 따로 설치할 것이 없습니다.
 (1분쯤 걸림) 버전을 바꾸면 `src/runner/node-deep.ts`의 파일 이름을 같이 고칩니다.
+
+## 소스 패치
+
+`build.mjs`가 컴파일 전에 한 곳만 고칩니다.
+
+- `build_arg_list`의 인자 수 한계 65535 → 1000만. `arr.push(...line.split(' ').map(Number))`,
+  `Math.max(...arr)`처럼 수십만 개를 펼치는 코드가 백준 node에서는 통과하지만, 브라우저 V8 스택이 넘쳐
+  이 모드로 오면 QuickJS의 이 한계에 다시 걸렸습니다. 인자 배열은 힙에 잡으므로 바이트코드의 지역 변수 한계와는 상관없습니다.
+
+`main.c`는 처리되지 않은 Promise 거부를 boot.js로 넘깁니다. node처럼 async 함수 안의 에러는 런타임 에러로,
+async 함수 안의 `process.exit()`는 바로 종료로 처리하기 위해서입니다.
 
 ## 알려진 차이
 

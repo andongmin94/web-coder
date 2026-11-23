@@ -28,6 +28,27 @@ static int eval_buf(JSContext *ctx, const void *buf, size_t len, const char *nam
     return 0;
 }
 
+/*
+ * 처리되지 않은 Promise 거부를 boot.js의 __webcoderRejection(promise, reason, isHandled)로 넘깁니다.
+ * (node처럼 async 함수 안의 에러나 process.exit()를 처리하려면 필요)
+ */
+static void promise_rejection_tracker(JSContext *ctx, JSValueConst promise, JSValueConst reason,
+                                      bool is_handled, void *opaque)
+{
+    (void)opaque;
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue fn = JS_GetPropertyStr(ctx, global, "__webcoderRejection");
+    if (JS_IsFunction(ctx, fn)) {
+        JSValueConst args[3] = { promise, reason, JS_NewBool(ctx, is_handled) };
+        JSValue ret = JS_Call(ctx, fn, global, 3, args);
+        if (JS_IsException(ret))
+            js_std_dump_error(ctx);
+        JS_FreeValue(ctx, ret);
+    }
+    JS_FreeValue(ctx, fn);
+    JS_FreeValue(ctx, global);
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 2) {
@@ -40,6 +61,7 @@ int main(int argc, char **argv)
     js_init_module_std(ctx, "qjs:std");
     js_init_module_os(ctx, "qjs:os");
     JS_SetModuleLoaderFunc2(rt, NULL, js_module_loader, js_module_check_attributes, NULL);
+    JS_SetHostPromiseRejectionTracker(rt, promise_rejection_tracker, NULL);
     js_std_add_helpers(ctx, argc - 1, argv + 1);
 
     static const char glue[] =

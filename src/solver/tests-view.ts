@@ -101,7 +101,12 @@ const plainBlock = (label: string | Node[], text: string | (Node | string)[]) =>
     ]);
 
 /** 실제 출력에서 기대 출력과 다른 줄을 빨간 글씨로, 그 안에서 다른 글자는 밑줄로 보여 줍니다. */
-const diffBlocks = (expected: string, actual: string) => {
+const diffBlocks = (
+    expected: string,
+    actual: string,
+    /** 두 줄이 같은지 (스페셜 저지 오차 비교면 오차 안이면 같음) */
+    sameLine: (a: string, e: string) => boolean = (a, e) => a === e
+) => {
     const e = normalizeOutput(expected).split('\n');
     const a = normalizeOutput(actual).split('\n');
     /** 다른 줄은 그 안에서 실제로 다른 글자만 한 번 더 강조합니다. (공백 하나 차이도 보이게) */
@@ -126,7 +131,7 @@ const diffBlocks = (expected: string, actual: string) => {
         const pre = h('pre');
         const shown = Math.min(lines.length, MAX_LINES);
         for (let i = 0; i < shown; i++) {
-            const bad = other !== null && lines[i] !== other[i];
+            const bad = other !== null && (other[i] === undefined || !sameLine(lines[i], other[i]));
             pre.append(
                 h(
                     'span',
@@ -266,7 +271,14 @@ export const renderTest = (
     if (state.phase === 'done') {
         const { stdout, stderr } = state.result.output;
         if (verdict === 'fail') {
-            body.append(...diffBlocks(test.expected, stdout));
+            const tolerance = usesTolerance(test, judge) ? judge.tolerance! : null;
+            body.append(
+                ...diffBlocks(
+                    test.expected,
+                    stdout,
+                    tolerance === null ? undefined : (a, e) => isSameWithTolerance(a, e, tolerance)
+                )
+            );
         } else if (verdict !== 'cancelled') {
             if (test.kind === 'sample' && verdict !== 'pass')
                 body.append(plainBlock('기대 출력', test.expected));

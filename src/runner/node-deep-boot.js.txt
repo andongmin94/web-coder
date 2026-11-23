@@ -176,6 +176,34 @@
         qstd.exit(code);
     }
 
+    // 처리되지 않은 Promise 거부 (main.c가 알려 줌): node처럼 async 함수 안의 에러는 프로그램을 끝내고,
+    // async 함수 안의 process.exit()는 바로 끝냅니다. 나중에 .catch가 붙는 경우를 위해 한 번 미뤄서 봅니다.
+    const unhandled = new Map();
+    let checkScheduled = false;
+    const checkRejections = () => {
+        checkScheduled = false;
+        if (finished || unhandled.size === 0) return;
+        const reason = unhandled.values().next().value;
+        handle(reason);
+        finish();
+    };
+    g.__webcoderRejection = (promise, reason, isHandled) => {
+        if (isHandled) {
+            unhandled.delete(promise);
+            return;
+        }
+        if (reason instanceof ExitSignal) {
+            handle(reason);
+            finish();
+            return;
+        }
+        unhandled.set(promise, reason);
+        if (!checkScheduled) {
+            checkScheduled = true;
+            qos.setTimeout(checkRejections, 0);
+        }
+    };
+
     try {
         qstd.writeFile('/main.js', WRAPPER_HEAD + qstd.loadFile('/source.js') + '\n})');
         qstd.loadScript('/main.js');

@@ -55,6 +55,9 @@ export const runNodeDeepWith = async (
     return { ...output, memoryBytes: undefined, elapsedMs };
 };
 
+/** 실행 전에 불러 둡니다. (불러오는 시간이 시간 제한에 들어가지 않게, worker.ts의 prepare에서 부름) */
+export const warmUpNodeDeep = () => loadModule();
+
 export const runNodeDeep = async (source: string, stdin: string) => {
     const module = await loadModule();
     if (!module) throw new Error('깊은 재귀 모드를 준비하지 못했습니다.');

@@ -76,3 +76,40 @@ test('한계를 넘으면 RangeError로 끝난다 (메모리를 망가뜨리지 
     );
     assert.equal(r.stdout, 'RangeError\n');
 });
+
+test('수십만 개를 펼친 호출 (push(...arr), Math.max(...arr))', { skip }, async () => {
+    const r = await run(
+        [
+            'const a = [];',
+            'const big = Array.from({ length: 300000 }, (_, i) => i % 7);',
+            'a.push(...big);',
+            'console.log(a.length, Math.max(...big), Math.min.apply(null, big));',
+        ].join('\n')
+    );
+    assert.equal(r.stderr, '');
+    assert.equal(r.stdout, '300000 6 0\n');
+});
+
+test('async 안의 에러와 process.exit (node처럼)', { skip }, async () => {
+    const thrown = await run("(async () => { await null; throw new Error('boom'); })();\n");
+    assert.equal(thrown.exitCode, 1);
+    assert.match(thrown.stderr, /^Error: boom/);
+
+    const exited = await run(
+        "(async () => { await null; console.log('a'); process.exit(0); console.log('b'); })();\n" +
+            "setTimeout(() => console.log('t'), 5);\n"
+    );
+    assert.equal(exited.stdout, 'a\n');
+    assert.equal(exited.exitCode, 0);
+
+    const rejected = await run("Promise.reject(new Error('x'));\n");
+    assert.equal(rejected.exitCode, 1);
+    assert.match(rejected.stderr, /Error: x/);
+
+    // 나중에 .catch가 붙으면 에러가 아님
+    const caught = await run(
+        "const p = Promise.reject(new Error('later'));\np.catch(() => console.log('caught'));\n"
+    );
+    assert.equal(caught.exitCode, 0);
+    assert.equal(caught.stdout, 'caught\n');
+});

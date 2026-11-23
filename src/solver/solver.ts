@@ -75,6 +75,12 @@ let current: ResolvedLanguage | null = null;
 let codeOpenValue: string | null = null;
 let customTests: CustomTest[] = [];
 const testStates = new Map<string, TestState>();
+/** Mac에서는 Ctrl+B가 에디터의 '커서 왼쪽'이라 문제 접기는 Cmd+B로 받습니다. */
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform);
+
+/** 내 테스트 id (같은 밀리초에 두 번 만들어도 겹치지 않게) */
+let testIdSeq = 0;
+const newTestId = () => `custom-${Date.now()}-${++testIdSeq}`;
 /** 펼쳐 둔 내 테스트 */
 const openTests = new Set<string>();
 /** 접어 둔 예제 (예제는 기본으로 펼침) */
@@ -95,6 +101,8 @@ let lastRun: {
     compileError: boolean;
 } | null = null;
 /** 마지막 실행에 걸린 시간: 컴파일(C++, Java)과 예제 실행을 나눠 상태 줄에 보여 줍니다. */
+/** 지금 보이는 테스트 결과를 만든 언어와 코드 (하나만 실행할 때 옛 결과를 지울지 판단) */
+let resultsKey: string | null = null;
 let lastTiming: { compileMs: number | null; firstLoad: boolean; runMs: number | null } | null =
     null;
 
@@ -217,7 +225,7 @@ const callbacks = {
         if (problemId) void storage.setCustomTests(problemId, customTests);
     },
     onDuplicate: (test: TestCase) => {
-        const id = `custom-${Date.now()}`;
+        const id = newTestId();
         customTests = [...customTests, { id, input: test.input, expected: test.expected }];
         openTests.add(id);
         if (problemId) void storage.setCustomTests(problemId, customTests);
@@ -388,6 +396,12 @@ const runTests = async (only?: string) => {
 
     cancelRequested = false;
     compileMessage = null;
+    // 하나만 돌릴 때 코드(또는 언어)가 바뀌었으면, 다른 테스트의 옛 결과는 지워
+    // "모두 통과" 같은 집계에 섞이지 않게 합니다.
+    const resultKey = `${lang.id}\n${source}`;
+    if (only && resultsKey !== resultKey)
+        for (const t of all) if (t.id !== only) testStates.set(t.id, { phase: 'idle' });
+    resultsKey = resultKey;
     for (const t of tests) testStates.set(t.id, { phase: 'queued' });
     setStage({
         kind: needsCompile
@@ -599,6 +613,7 @@ const renderHeader = () => {
 
 /** 문제 데이터를 받으면(처음 또는 다른 탭에서 문제 페이지를 연 뒤) 화면과 예제를 갱신합니다. */
 const applyProblem = (next: ProblemData) => {
+    if (problem?.id !== next.id) closedSamples.clear();
     problem = next;
     renderHeader();
     renderProblem(problemContent, next);
@@ -764,7 +779,12 @@ document.addEventListener('keydown', (e) => {
         closeConfirm();
     }
     // Ctrl+B: 문제 패널 접기/펼치기 (에디터 안에서도)
-    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'b') {
+    if (
+        (IS_MAC ? e.metaKey : e.ctrlKey) &&
+        !e.shiftKey &&
+        !e.altKey &&
+        e.key.toLowerCase() === 'b'
+    ) {
         e.preventDefault();
         toggleProblem();
         return;
@@ -782,7 +802,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 addTestButton.addEventListener('click', () => {
-    const id = `custom-${Date.now()}`;
+    const id = newTestId();
     customTests = [...customTests, { id, input: '', expected: '' }];
     openTests.add(id);
     if (problemId) void storage.setCustomTests(problemId, customTests);

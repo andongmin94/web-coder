@@ -63,12 +63,14 @@ export const prepareCpp = async (artifact: Uint8Array) => {
                 ...output
             } = await runWasi(program.module, ['program'], {}, stdin);
             if (!stackOverflow) return withoutStack(output);
-            if (!jspi()) return { ...output, stderr: output.stderr + NO_JSPI_NOTE };
+            if (!jspi()) return withoutStack({ ...output, stderr: output.stderr + NO_JSPI_NOTE });
             first = output;
         }
         const deepModule = await (program.deep ??= compileDeep(artifact));
         if (!deepModule)
-            return first ?? { stdout: '', stderr: '', exitCode: 134, truncated: false };
+            return first
+                ? withoutStack(first)
+                : { stdout: '', stderr: '', exitCode: 134, truncated: false };
         program.needsDeep = true;
 
         // 실패한 첫 시도는 실행 시간에서 뺍니다.
