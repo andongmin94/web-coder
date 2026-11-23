@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "node build.ts",
+    "package": "node build.ts && node tools/package.ts",
     "watch": "node build.ts --watch",
     "test": "node --test \"src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",

@@ -4,6 +4,7 @@ package-lock.json
 
 # Build and cache
 dist/
+release/
 tmp/
 .temp/
 .cache/

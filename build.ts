@@ -1,6 +1,9 @@
 // 확장 빌드 스크립트. `node build.ts` (Node 내장 TS 실행)로 돌립니다.
 import * as esbuild from 'esbuild';
+import { createReadStream, createWriteStream } from 'node:fs';
 import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { pipeline } from 'node:stream/promises';
+import { createGzip } from 'node:zlib';
 
 const watch = process.argv.includes('--watch');
 const outdir = 'dist';
@@ -10,6 +13,14 @@ const clangPkg = JSON.parse(await readFile('node_modules/@yowasp/clang/package.j
     version: string;
 };
 const YOWASP_GEN = 'node_modules/@yowasp/clang/gen';
+
+/** 설치 용량을 줄이려고 gzip으로 담는 큰 리소스 (dist 기준 경로). 컴파일 워커의 gz-fetch.ts가 풀어 씁니다. */
+const GZIP_ASSETS = [
+    'clang/llvm.core.wasm',
+    'clang/llvm-resources.tar',
+    'clang-eh/libc++.a',
+    'clang-eh/libc++abi.a',
+];
 
 const manifest = {
     manifest_version: 3,
@@ -117,7 +128,10 @@ const entries: esbuild.BuildOptions[] = [
         // YoWASP 번들은 import.meta.url 기준으로 리소스를 찾으므로 ESM 모듈 워커로 dist/clang/에 둡니다.
         entryPoints: { 'clang/compiler-worker': 'src/runner/compiler-worker.ts' },
         format: 'esm',
-        define: { COMPILER_VERSION: JSON.stringify(clangPkg.version) },
+        define: {
+            COMPILER_VERSION: JSON.stringify(clangPkg.version),
+            GZIP_ASSETS: JSON.stringify(GZIP_ASSETS),
+        },
     },
     {
         // node.js 인텔리센스: TypeScript 언어 서비스. Node 전용 분기의 require는 브라우저에서 실행되지 않습니다.
@@ -174,6 +188,19 @@ const buildJavaIndexFile = async () => {
     await writeFile(`${outdir}/intel/java-index.json`, JSON.stringify(buildJavaIndex(entries)));
 };
 
+const gzipAssets = () =>
+    Promise.all(
+        GZIP_ASSETS.map(async (path) => {
+            const file = `${outdir}/${path}`;
+            await pipeline(
+                createReadStream(file),
+                createGzip({ level: 9 }),
+                createWriteStream(`${file}.gz`)
+            );
+            await rm(file);
+        })
+    );
+
 const copyStatic = async () => {
     await mkdir(`${outdir}/wasm`, { recursive: true });
     await cp('public', outdir, { recursive: true });
@@ -193,7 +220,7 @@ const copyStatic = async () => {
         'node_modules/@typefox/pyright-browser/dist/pyright.worker.js.LICENSE.txt',
         `${outdir}/intel/pyright.worker.js.LICENSE.txt`
     );
-    await Promise.all([buildTsLibs(), buildTypeshed(), buildJavaIndexFile()]);
+    await Promise.all([buildTsLibs(), buildTypeshed(), buildJavaIndexFile(), gzipAssets()]);
     await writeFile(`${outdir}/manifest.json`, JSON.stringify(manifest, null, 2));
 };
 

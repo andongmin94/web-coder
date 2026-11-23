@@ -1,5 +1,6 @@
 // C++ 컴파일 워커 (모듈 워커). YoWASP clang(LLVM 22)으로 wasm32-wasip1 프로그램을 만듭니다.
 // 이 파일은 dist/clang/에 번들되고, YoWASP 리소스(llvm.core.wasm 등)도 같은 폴더에 둡니다.
+import './gz-fetch.ts'; // YoWASP보다 먼저 와야 합니다.
 import { commands } from '@yowasp/clang';
 import {
     BITS_STDCXX,
