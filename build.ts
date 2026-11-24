@@ -46,6 +46,12 @@ const manifest = {
             world: 'MAIN',
         },
         {
+            // 채점 현황 등의 "수정"(다시 제출) 링크가 웹 코더로 열리게 합니다. (같은 사이트라 권한은 그대로)
+            matches: ['https://acmicpc.net/*', 'https://www.acmicpc.net/*'],
+            js: ['content-links.js'],
+            run_at: 'document_idle',
+        },
+        {
             // 문제 페이지에서 본문/예제를 저장해 둡니다. (BOJ는 fetch/iframe 요청에 빈 응답을 줌)
             matches: ['https://acmicpc.net/problem/*', 'https://www.acmicpc.net/problem/*'],
             js: ['content-problem.js'],
@@ -122,6 +128,7 @@ const entries: esbuild.BuildOptions[] = [
     { entryPoints: { content: 'src/content/boj.ts' } },
     { entryPoints: { 'content-main': 'src/content/boj-main.ts' } },
     { entryPoints: { 'content-problem': 'src/content/problem-page.ts' } },
+    { entryPoints: { 'content-links': 'src/content/links.ts' } },
     { entryPoints: { solver: 'src/solver/solver.ts' } },
     { entryPoints: { 'runner-worker': 'src/runner/worker.ts' } },
     { entryPoints: { sandbox: 'src/sandbox/sandbox.ts' }, plugins: [workerSourcePlugin] },
