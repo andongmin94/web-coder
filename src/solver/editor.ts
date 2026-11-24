@@ -19,7 +19,7 @@ import {
     indentOnInput,
     indentUnit,
 } from '@codemirror/language';
-import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
+import { defaultKeymap, history, historyKeymap, indentLess } from '@codemirror/commands';
 import {
     acceptCompletion,
     closeBrackets,
@@ -35,6 +35,7 @@ import { java } from '@codemirror/lang-java';
 import type { RuntimeInfo } from '../shared/languages.ts';
 import type { LanguageIntel } from '../intel/types.ts';
 import { intelExtensions } from './intel-ext.ts';
+import { insertTab } from './tab.ts';
 import { AUTO_THEME, editorThemeExtension } from './themes.ts';
 
 const languageExtension = (editor: RuntimeInfo['editor']): Extension => {
@@ -147,7 +148,8 @@ export class CodeEditor {
                     ...lintKeymap,
                     // 자동 완성 목록이 열려 있으면 Tab으로 고릅니다. (VS Code처럼) 닫혀 있으면 들여쓰기
                     { key: 'Tab', run: acceptCompletion },
-                    indentWithTab,
+                    // 커서 자리에 공백 (여러 줄 선택이면 그 줄들을 들여쓰기), Shift+Tab은 내어쓰기
+                    { key: 'Tab', run: insertTab, shift: indentLess },
                 ]),
                 indentUnit.of('    '),
                 EditorState.tabSize.of(4),
