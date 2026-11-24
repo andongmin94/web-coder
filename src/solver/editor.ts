@@ -20,7 +20,12 @@ import {
     indentUnit,
 } from '@codemirror/language';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
-import { closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete';
+import {
+    acceptCompletion,
+    closeBrackets,
+    closeBracketsKeymap,
+    completionKeymap,
+} from '@codemirror/autocomplete';
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
 import { lintKeymap } from '@codemirror/lint';
 import { cpp } from '@codemirror/lang-cpp';
@@ -140,6 +145,8 @@ export class CodeEditor {
                     ...foldKeymap,
                     ...completionKeymap,
                     ...lintKeymap,
+                    // 자동 완성 목록이 열려 있으면 Tab으로 고릅니다. (VS Code처럼) 닫혀 있으면 들여쓰기
+                    { key: 'Tab', run: acceptCompletion },
                     indentWithTab,
                 ]),
                 indentUnit.of('    '),
