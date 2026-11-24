@@ -11,7 +11,7 @@ import { HighlightStyle, defaultHighlightStyle, syntaxHighlighting } from '@code
 import type { Extension } from '@codemirror/state';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { EditorView } from '@codemirror/view';
-import { tags as t } from '@lezer/highlight';
+import { tags as t, type Tag } from '@lezer/highlight';
 import { EXTRACTED_THEMES } from './theme-data.ts';
 
 export type Palette = {
@@ -153,6 +153,30 @@ export const EDITOR_THEMES: EditorTheme[] = [
     { id: 'one-dark', name: 'One Dark', group: '기타', dark: true },
 ];
 
+/**
+ * 문법 요소 → 팔레트 색. (syntax.test.ts가 언어별로 어떤 이름이 어느 색이 되는지 이것으로 확인합니다)
+ * control은 팔레트에 없으면 keyword 색입니다.
+ */
+export const SYNTAX_RULES: {
+    tag: Tag | Tag[];
+    color: Exclude<keyof Palette, 'control'> | 'control';
+}[] = [
+    { tag: [t.keyword, t.modifier, t.operatorKeyword, t.self, t.bool, t.null], color: 'keyword' },
+    { tag: [t.controlKeyword, t.moduleKeyword], color: 'control' },
+    { tag: [t.string, t.special(t.string), t.character, t.regexp], color: 'string' },
+    { tag: [t.number, t.escape], color: 'number' },
+    { tag: t.comment, color: 'comment' },
+    { tag: [t.variableName, t.propertyName], color: 'variable' },
+    {
+        tag: [t.function(t.variableName), t.function(t.propertyName), t.macroName],
+        color: 'function',
+    },
+    { tag: [t.typeName, t.className, t.namespace], color: 'type' },
+    { tag: [t.constant(t.variableName), t.standard(t.variableName), t.atom], color: 'constant' },
+    { tag: [t.meta, t.processingInstruction, t.annotation], color: 'meta' },
+    { tag: [t.operator, t.punctuation, t.bracket, t.separator], color: 'fg' },
+];
+
 /** 색에 투명도를 붙입니다. (이미 투명도가 있는 색은 그대로) */
 const alpha = (color: string, suffix: string) => (color.length === 7 ? color + suffix : color);
 
@@ -187,26 +211,10 @@ const fromPalette = (p: Palette, dark: boolean): Extension => [
     ),
     syntaxHighlighting(
         HighlightStyle.define([
-            {
-                tag: [t.keyword, t.modifier, t.operatorKeyword, t.self, t.bool, t.null],
-                color: p.keyword,
-            },
-            { tag: [t.controlKeyword, t.moduleKeyword], color: p.control ?? p.keyword },
-            { tag: [t.string, t.special(t.string), t.character, t.regexp], color: p.string },
-            { tag: [t.number, t.escape], color: p.number },
-            { tag: t.comment, color: p.comment },
-            { tag: [t.variableName, t.propertyName], color: p.variable },
-            {
-                tag: [t.function(t.variableName), t.function(t.propertyName), t.macroName],
-                color: p.function,
-            },
-            { tag: [t.typeName, t.className, t.namespace], color: p.type },
-            {
-                tag: [t.constant(t.variableName), t.standard(t.variableName), t.atom],
-                color: p.constant,
-            },
-            { tag: [t.meta, t.processingInstruction, t.annotation], color: p.meta },
-            { tag: [t.operator, t.punctuation, t.bracket, t.separator], color: p.fg },
+            ...SYNTAX_RULES.map(({ tag, color }) => ({
+                tag,
+                color: color === 'control' ? (p.control ?? p.keyword) : p[color],
+            })),
             { tag: t.invalid, color: '#f44747' },
         ])
     ),

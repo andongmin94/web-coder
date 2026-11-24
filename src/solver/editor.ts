@@ -16,7 +16,6 @@ import {
     foldKeymap,
     indentOnInput,
     indentUnit,
-    LanguageSupport,
 } from '@codemirror/language';
 import { defaultKeymap, history, historyKeymap, indentLess } from '@codemirror/commands';
 import {
@@ -27,48 +26,14 @@ import {
 } from '@codemirror/autocomplete';
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
 import { lintKeymap } from '@codemirror/lint';
-import { cpp } from '@codemirror/lang-cpp';
-import { python } from '@codemirror/lang-python';
-import { javascript } from '@codemirror/lang-javascript';
-import { javaLanguage } from '@codemirror/lang-java';
-import { styleTags, tags } from '@lezer/highlight';
 import type { RuntimeInfo } from '../shared/languages.ts';
 import type { LanguageIntel } from '../intel/types.ts';
 import { intelExtensions } from './intel-ext.ts';
 import { insertTab } from './tab.ts';
 import { keymapExtension, type KeymapName } from './keymaps.ts';
 import { indentGuides } from './indent-guides.ts';
+import { languageExtension } from './syntax.ts';
 import { AUTO_THEME, editorThemeExtension } from './themes.ts';
-
-/**
- * Java 문법은 메서드·생성자 선언의 이름을 변수 선언과 똑같이 표시해서 함수 색이 들지 않습니다.
- * (C++, Python, JavaScript는 함수 선언 이름을 따로 표시함) IntelliJ처럼 함수 색이 들도록 더합니다.
- */
-const javaWithFunctionNames = () =>
-    new LanguageSupport(
-        javaLanguage.configure({
-            props: [
-                styleTags({
-                    'MethodDeclaration/Definition ConstructorDeclaration/Definition': tags.function(
-                        tags.definition(tags.variableName)
-                    ),
-                }),
-            ],
-        })
-    );
-
-const languageExtension = (editor: RuntimeInfo['editor']): Extension => {
-    switch (editor) {
-        case 'cpp':
-            return cpp();
-        case 'python':
-            return python();
-        case 'javascript':
-            return javascript();
-        case 'java':
-            return javaWithFunctionNames();
-    }
-};
 
 export type EditorHandlers = {
     onChange: (code: string) => void;
