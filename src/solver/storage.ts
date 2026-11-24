@@ -10,7 +10,7 @@ export type Prefs = {
     editorTheme?: string;
     /** 에디터 글자 크기 (px) */
     editorFontSize?: number;
-    /** 긴 줄 자동 줄바꿈 */
+    /** 긴 줄 자동 줄바꿈 (없으면 켬) */
     editorWrap?: boolean;
     /** 에디터 글꼴 이름 (PC에 설치된 글꼴, 없으면 기본 목록) */
     editorFont?: string;

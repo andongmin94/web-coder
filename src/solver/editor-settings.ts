@@ -163,7 +163,8 @@ export const setupEditorSettings = (editor: CodeEditor, showToast: ShowToast) =>
             : DEFAULT_FONT_SIZE;
         themeSelect.value = theme;
         fontSizeSelect.value = String(size);
-        wrapCheckbox.checked = prefs.editorWrap === true;
+        // 긴 줄 줄바꿈은 기본으로 켜 둡니다. (직접 끈 사람만 끔)
+        wrapCheckbox.checked = prefs.editorWrap !== false;
         appearanceSelect.value = prefs.appearance ?? '';
         applyTheme(theme);
         applyAppearance(appearanceSelect.value);

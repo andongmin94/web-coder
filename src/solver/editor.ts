@@ -57,7 +57,7 @@ export class CodeEditor {
     private readonly themeSlot = new Compartment();
     private readonly wrapSlot = new Compartment();
     private theme = AUTO_THEME;
-    private wrap = false;
+    private wrap = true;
     private readonly darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
     private languageExt: Extension = [];
     private readonly handlers: EditorHandlers;
