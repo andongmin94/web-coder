@@ -228,6 +228,17 @@ const copyStatic = async () => {
         'node_modules/@typefox/pyright-browser/dist/pyright.worker.js.LICENSE.txt',
         `${outdir}/intel/pyright.worker.js.LICENSE.txt`
     );
+    // 코드 정렬 (solver/format.ts): clang-format, Ruff 포매터 wasm
+    await mkdir(`${outdir}/format`, { recursive: true });
+    for (const [pkgDir, files] of [
+        ['node_modules/@wasm-fmt/clang-format', ['clang-format.wasm', 'LICENSE']],
+        ['node_modules/@wasm-fmt/ruff_fmt', ['ruff_fmt_bg.wasm', 'LICENSE']],
+    ] as const) {
+        for (const file of files) {
+            const target = file === 'LICENSE' ? `${pkgDir.split('/').pop()}-LICENSE.txt` : file;
+            await cp(`${pkgDir}/${file}`, `${outdir}/format/${target}`);
+        }
+    }
     await Promise.all([buildTsLibs(), buildTypeshed(), buildJavaIndexFile(), gzipAssets()]);
     await writeFile(`${outdir}/manifest.json`, JSON.stringify(manifest, null, 2));
 };

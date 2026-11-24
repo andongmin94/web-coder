@@ -49,6 +49,7 @@
     - 글꼴: PC에 설치된 코딩 글꼴을 찾아 보여 주고, 직접 입력하거나 PC의 모든 글꼴을 불러올 수 있습니다. (글꼴 파일을 받지 않음)
     - 글자 크기, 자동 줄바꿈, 소스 코드 공개 범위, 내 템플릿 저장
 - 단축키: `Ctrl+Enter` 실행, `Ctrl+Shift+Enter` 제출, `Ctrl+Space` 자동완성, `Ctrl+B` 문제 패널 접기
+- **코드 정렬**: `Shift+Alt+F` (IntelliJ 키맵은 `Ctrl+Alt+L`, Visual Studio는 `Ctrl+K, Ctrl+D`도). C·C++·Java·node.js는 [clang-format](https://github.com/wasm-fmt/clang-format)(LLVM 스타일, 들여쓰기 4칸, 한 줄 100자, include 순서 유지), Python은 [Ruff](https://github.com/wasm-fmt/ruff_fmt) 포매터로 정렬합니다. 둘 다 wasm이라 처음 정렬할 때만 불러옵니다. 한 번에 되돌릴 수 있고, 커서는 같은 코드 자리에 남습니다. 문법이 틀린 Python은 정렬하지 않고 줄 번호를 알려 줍니다.
 - 에디터 단축키는 설정에서 **VS Code**(기본), **IntelliJ**, **Visual Studio**, **Vim** 중에 고릅니다. 줄 옮기기·복제·삭제, 주석, 여러 커서, 줄 선택 등이 각 에디터와 같습니다. (Vim은 [@replit/codemirror-vim](https://github.com/replit/codemirror-vim)) 들여쓰기 안내선도 보입니다.
 - 제출은 BOJ 원래 폼에 코드를 채워 원래 제출 버튼으로 보냅니다. (reCAPTCHA 등 BOJ의 제출 절차를 그대로 따름)
 
@@ -82,6 +83,7 @@ src/
 │  ├─ solver.ts      # 진입점: 상태, 실행·제출 흐름
 │  ├─ editor-settings.ts / fonts.ts # 설정 창 (테마, 화면 밝기, 글꼴)
 │  ├─ tests-view.ts  # 예제·내 테스트 카드, 출력 비교
+│  ├─ format.ts      # 코드 정렬 (clang-format, Ruff wasm)
 │  └─ problem-view.ts # 문제 패널 (정화 + KaTeX)
 ├─ runner/
 │  ├─ pool.ts        # 워커 풀, C++ 컴파일 캐시, 시간 제한

@@ -33,12 +33,15 @@ import { insertTab } from './tab.ts';
 import { keymapExtension, type KeymapName } from './keymaps.ts';
 import { indentGuides } from './indent-guides.ts';
 import { languageExtension } from './syntax.ts';
+import { formatContext } from './format.ts';
 import { AUTO_THEME, editorThemeExtension } from './themes.ts';
 
 export type EditorHandlers = {
     onChange: (code: string) => void;
     onRun: () => void;
     onSubmit: () => void;
+    /** 코드 정렬 실패 등 짧은 알림 */
+    onNotice: (message: string) => void;
 };
 
 export class CodeEditor {
@@ -52,6 +55,7 @@ export class CodeEditor {
     private wrap = true;
     private readonly darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
     private languageExt: Extension = [];
+    private formatLang: RuntimeInfo['editor'] | null = null;
     private readonly handlers: EditorHandlers;
     private intel: LanguageIntel | null = null;
 
@@ -105,7 +109,7 @@ export class CodeEditor {
     }
 
     private createState(doc: string) {
-        const { onRun, onSubmit, onChange } = this.handlers;
+        const { onRun, onSubmit, onChange, onNotice } = this.handlers;
         return EditorState.create({
             doc,
             extensions: [
@@ -145,6 +149,9 @@ export class CodeEditor {
                 indentUnit.of('    '),
                 EditorState.tabSize.of(4),
                 intelExtensions(() => this.intel),
+                this.formatLang
+                    ? formatContext.of({ lang: this.formatLang, notify: onNotice })
+                    : [],
                 this.languageSlot.of(this.languageExt),
                 this.themeSlot.of(this.themeExt()),
                 this.wrapSlot.of(this.wrapExt()),
@@ -164,6 +171,7 @@ export class CodeEditor {
     /** 문서를 교체합니다 (변경 이벤트 없이, 되돌리기 기록도 초기화). */
     load(code: string, runtime: RuntimeInfo, intel: LanguageIntel | null) {
         this.languageExt = languageExtension(runtime.editor);
+        this.formatLang = runtime.editor;
         this.intel = intel;
         this.view.setState(this.createState(code));
     }

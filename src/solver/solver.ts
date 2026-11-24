@@ -189,6 +189,7 @@ const editor = new CodeEditor($('#editor'), {
     onChange: scheduleSave,
     onRun: () => void runTests(),
     onSubmit: () => requestSubmit(),
+    onNotice: (message) => showToast(message, 'error'),
 });
 
 // ── 테스트 목록 ──────────────────────────────────────────────────

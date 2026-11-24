@@ -2,6 +2,7 @@
 // 두 키맵에 공통인 기본 단축키(되돌리기, 주석, 줄 옮기기 등)는 editor.ts의 CodeMirror 기본 키맵에 있고,
 // 여기서는 서로 다른 키와 마우스 동작만 정의해 그보다 먼저 적용합니다.
 // (브라우저가 가로채는 키는 쓸 수 없습니다. 예: IntelliJ의 Ctrl+W 선택 확장은 탭 닫기라 넣지 않음)
+// 코드 정렬(format.ts)은 어느 키맵이든 Shift+Alt+F, 그리고 각 에디터의 서식 키로 합니다.
 // Vim은 @replit/codemirror-vim(MIT)을 씁니다.
 import { EditorSelection, Prec, type Extension, type StateCommand } from '@codemirror/state';
 import {
@@ -24,6 +25,7 @@ import {
     toggleBlockComment,
 } from '@codemirror/commands';
 import { vim } from '@replit/codemirror-vim';
+import { formatDocument } from './format.ts';
 import {
     gotoLine,
     openSearchPanel,
@@ -143,7 +145,7 @@ const INTELLIJ_KEYS = [
     { key: 'Mod-r', run: openSearchPanel }, // 찾기 창에 바꾸기 칸이 같이 있음
     { key: 'Shift-Enter', run: insertBlankLine }, // 아래에 새 줄
     { key: 'Mod-Alt-i', run: indentSelection }, // 자동 들여쓰기
-    { key: 'Mod-Alt-l', run: reindentAll }, // 서식 (들여쓰기만)
+    { key: 'Mod-Alt-l', run: formatDocument }, // 코드 정렬 (Reformat Code)
 ];
 
 const VISUAL_STUDIO_KEYS = [
@@ -154,7 +156,7 @@ const VISUAL_STUDIO_KEYS = [
     { key: 'Mod-d', run: copyLineDown }, // 줄 복제
     { key: 'Mod-k Mod-c', run: lineComment }, // 주석
     { key: 'Mod-k Mod-u', run: lineUncomment }, // 주석 풀기
-    { key: 'Mod-k Mod-d', run: reindentAll }, // 문서 서식 (들여쓰기만)
+    { key: 'Mod-k Mod-d', run: formatDocument }, // 문서 서식
     { key: 'Mod-]', run: cursorMatchingBracket }, // 짝 괄호로
     { key: 'Mod-g', run: gotoLine },
     { key: 'Mod-h', run: openSearchPanel }, // 바꾸기
@@ -162,8 +164,16 @@ const VISUAL_STUDIO_KEYS = [
     { key: 'Shift-Alt-;', run: selectSelectionMatches }, // 같은 단어 모두
 ];
 
+/** 모든 키맵에 공통: VS Code의 문서 서식 키 */
+const FORMAT_KEYS = keymap.of([{ key: 'Shift-Alt-f', run: formatDocument }]);
+
 /** 키맵과 그에 맞는 마우스 동작 (커서 추가, 세로 선택) */
-export const keymapExtension = (name: KeymapName): Extension =>
+export const keymapExtension = (name: KeymapName): Extension => [
+    Prec.high(FORMAT_KEYS),
+    keymapFor(name),
+];
+
+const keymapFor = (name: KeymapName): Extension =>
     name === 'vim'
         ? // Vim 모드는 다른 키맵보다 먼저 키를 받아야 합니다. (아래에 모드 표시줄)
           [Prec.highest(vim({ status: true }))]
