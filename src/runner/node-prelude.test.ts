@@ -246,3 +246,11 @@ for (const [name, source, expected] of TIMING) {
         assert.equal((await run(source, '1\n2\n3\n')).stdout.trim(), expected);
     });
 }
+
+test('기본 템플릿은 윈도우식 줄 끝(\r\n) 입력도 줄마다 \r 없이 나눈다', async () => {
+    const { RUNTIMES } = await import('../shared/languages.ts');
+    const source = RUNTIMES.javascript.template + 'console.log(JSON.stringify(input));';
+    for (const stdin of ['3\r\nYES\r\n1 2\r\n', '3\nYES\n1 2\n', '3\nYES\n1 2']) {
+        assert.equal((await run(source, stdin)).stdout, '["3","YES","1 2"]\n');
+    }
+});

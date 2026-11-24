@@ -30,18 +30,18 @@ using namespace std;
 
 int main() {
     ios::sync_with_stdio(false);
-    cin.tie(nullptr);
+    cin.tie(0);
 
     return 0;
 }
 `;
 
 const PYTHON_TEMPLATE = `import sys
-input = sys.stdin.readline
+input = lambda: sys.stdin.readline().rstrip()
 
 `;
 
-const JS_TEMPLATE = `const input = require('fs').readFileSync('/dev/stdin', 'utf8').trim().split('\\n');
+const JS_TEMPLATE = `const input = require('fs').readFileSync('/dev/stdin', 'utf8').trim().split(/\\r?\\n/);
 
 `;
 
