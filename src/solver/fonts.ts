@@ -1,9 +1,12 @@
 // 에디터 글꼴: 이 PC에 설치된 코딩 글꼴을 찾아 고를 수 있게 합니다.
 // 글꼴 파일을 받지 않고, CSS font-family로 설치된(로컬) 글꼴을 그대로 씁니다.
 
-/** 기본 글꼴 목록 (solver.css의 --mono와 같음). 고른 글꼴이 없을 때 이 순서로 씁니다. */
+/**
+ * 에디터 기본 글꼴 목록. 고른 글꼴이 없을 때 이 순서로 씁니다. (Consolas가 기본)
+ * Consolas에는 한글이 없어서, 한글은 다음 글꼴(D2Coding 등)이나 시스템 글꼴로 나옵니다.
+ */
 const DEFAULT_MONO =
-    "'D2Coding', 'JetBrains Mono', 'Cascadia Code', Consolas, ui-monospace, monospace";
+    "Consolas, 'D2Coding', 'JetBrains Mono', 'Cascadia Code', ui-monospace, monospace";
 
 /** 많이 쓰는 코딩 글꼴. 설치된 것만 목록에 보여 줍니다. */
 const CODING_FONTS = [
@@ -59,7 +62,7 @@ export const installedCodingFonts = () => (installed ??= CODING_FONTS.filter(isF
 
 /** 기본 목록에서 이 PC에 있어 실제로 쓰이는 글꼴 이름 (없으면 null = 브라우저 기본 고정폭) */
 export const defaultFontInUse = () =>
-    ['D2Coding', 'JetBrains Mono', 'Cascadia Code', 'Consolas'].find(isFontInstalled) ?? null;
+    ['Consolas', 'D2Coding', 'JetBrains Mono', 'Cascadia Code'].find(isFontInstalled) ?? null;
 
 type LocalFontData = { family: string };
 type QueryLocalFonts = () => Promise<LocalFontData[]>;
