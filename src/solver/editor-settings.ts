@@ -1,4 +1,4 @@
-// 설정 창의 에디터·화면 설정: 테마, 화면 밝기, 글꼴, 글자 크기, 줄바꿈.
+// 설정 창의 에디터·화면 설정: 테마, 화면 밝기, 글꼴, 글자 크기, 줄바꿈, 단축키.
 // 바꾼 값은 바로 적용하고 prefs에 저장합니다.
 import type { CodeEditor } from './editor.ts';
 import {
@@ -10,6 +10,7 @@ import {
     queryAllFontFamilies,
 } from './fonts.ts';
 import { AUTO_THEME, EDITOR_THEMES } from './themes.ts';
+import { KEYMAPS, type KeymapName } from './keymaps.ts';
 import { storage } from './storage.ts';
 import { $, h } from './dom.ts';
 
@@ -19,6 +20,12 @@ export const setupEditorSettings = (editor: CodeEditor, showToast: ShowToast) =>
     const themeSelect = $<HTMLSelectElement>('#editor-theme');
     const fontSizeSelect = $<HTMLSelectElement>('#editor-font-size');
     const wrapCheckbox = $<HTMLInputElement>('#editor-wrap');
+    const keymapSelect = $<HTMLSelectElement>('#editor-keymap');
+    keymapSelect.replaceChildren(
+        ...KEYMAPS.map((k) =>
+            h('option', { value: k.id }, k.id === 'vscode' ? `${k.label} (기본)` : k.label)
+        )
+    );
     const FONT_SIZES = [12, 13, 14, 14.5, 15, 16, 18, 20];
     const DEFAULT_FONT_SIZE = 14.5;
 
@@ -172,6 +179,8 @@ export const setupEditorSettings = (editor: CodeEditor, showToast: ShowToast) =>
         renderFontOptions();
         applyFontSize(size);
         editor.setWrap(wrapCheckbox.checked);
+        keymapSelect.value = prefs.editorKeymap === 'intellij' ? 'intellij' : 'vscode';
+        editor.setKeymap(keymapSelect.value as KeymapName);
     });
 
     themeSelect.addEventListener('change', () => {
@@ -186,5 +195,10 @@ export const setupEditorSettings = (editor: CodeEditor, showToast: ShowToast) =>
     wrapCheckbox.addEventListener('change', () => {
         editor.setWrap(wrapCheckbox.checked);
         void storage.updatePrefs({ editorWrap: wrapCheckbox.checked });
+    });
+    keymapSelect.addEventListener('change', () => {
+        const name = keymapSelect.value as KeymapName;
+        editor.setKeymap(name);
+        void storage.updatePrefs({ editorKeymap: name });
     });
 };

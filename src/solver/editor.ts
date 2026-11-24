@@ -1,7 +1,6 @@
 // CodeMirror 6 에디터 (+ 언어별 인텔리센스)
 import { Compartment, EditorState, Prec, type Extension } from '@codemirror/state';
 import {
-    crosshairCursor,
     drawSelection,
     dropCursor,
     EditorView,
@@ -10,7 +9,6 @@ import {
     highlightSpecialChars,
     keymap,
     lineNumbers,
-    rectangularSelection,
 } from '@codemirror/view';
 import {
     bracketMatching,
@@ -36,6 +34,8 @@ import type { RuntimeInfo } from '../shared/languages.ts';
 import type { LanguageIntel } from '../intel/types.ts';
 import { intelExtensions } from './intel-ext.ts';
 import { insertTab } from './tab.ts';
+import { keymapExtension, type KeymapName } from './keymaps.ts';
+import { indentGuides } from './indent-guides.ts';
 import { AUTO_THEME, editorThemeExtension } from './themes.ts';
 
 const languageExtension = (editor: RuntimeInfo['editor']): Extension => {
@@ -62,6 +62,8 @@ export class CodeEditor {
     private readonly languageSlot = new Compartment();
     private readonly themeSlot = new Compartment();
     private readonly wrapSlot = new Compartment();
+    private readonly keymapSlot = new Compartment();
+    private keymapName: KeymapName = 'vscode';
     private theme = AUTO_THEME;
     private wrap = true;
     private readonly darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -107,6 +109,12 @@ export class CodeEditor {
         this.view.dispatch({ effects: this.wrapSlot.reconfigure(this.wrapExt()) });
     }
 
+    /** 키 설정 (VS Code 또는 IntelliJ) */
+    setKeymap(name: KeymapName) {
+        this.keymapName = name;
+        this.view.dispatch({ effects: this.keymapSlot.reconfigure(keymapExtension(name)) });
+    }
+
     /** 글자 크기 같은 스타일이 바뀐 뒤 줄 높이를 다시 재게 합니다. */
     refresh() {
         this.view.requestMeasure();
@@ -128,9 +136,8 @@ export class CodeEditor {
                 indentOnInput(),
                 bracketMatching(),
                 closeBrackets(),
-                rectangularSelection(),
-                crosshairCursor(),
                 highlightActiveLine(),
+                indentGuides,
                 highlightSelectionMatches(),
                 Prec.highest(
                     keymap.of([
@@ -157,6 +164,8 @@ export class CodeEditor {
                 this.languageSlot.of(this.languageExt),
                 this.themeSlot.of(this.themeExt()),
                 this.wrapSlot.of(this.wrapExt()),
+                // 키 설정별 단축키와 마우스 동작 (기본 키맵보다 먼저)
+                this.keymapSlot.of(keymapExtension(this.keymapName)),
                 EditorView.updateListener.of((update) => {
                     if (update.docChanged) onChange(update.state.doc.toString());
                 }),

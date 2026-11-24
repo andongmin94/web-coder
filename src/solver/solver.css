@@ -622,6 +622,27 @@ body.dragging .gutter {
     font-size: var(--editor-font-size, 14.5px);
 }
 
+/* 들여쓰기 안내선 (indent-guides.ts): 들여쓰기 단위마다 옅은 세로선. 색은 글자색을 옅게 써서 테마를 따름 */
+#editor .cm-line.cm-indent-guides {
+    position: relative;
+}
+
+#editor .cm-indent-guides::before {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 6px; /* CodeMirror .cm-line의 왼쪽 여백 */
+    width: var(--wc-guides);
+    background-image: repeating-linear-gradient(
+        to right,
+        currentColor 0 1px,
+        transparent 1px var(--wc-guide-step)
+    );
+    opacity: 0.14;
+    pointer-events: none;
+    content: '';
+}
+
 /* 글꼴은 메뉴에서 고를 수 있습니다. (fonts.ts, 고르지 않으면 --mono) */
 #editor .cm-scroller {
     font-family: var(--editor-font, var(--mono));
