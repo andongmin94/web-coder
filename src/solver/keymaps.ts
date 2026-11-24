@@ -1,7 +1,8 @@
-// 에디터 키 설정: VS Code(기본)와 IntelliJ.
+// 에디터 키 설정: VS Code(기본), IntelliJ, Visual Studio, Vim.
 // 두 키맵에 공통인 기본 단축키(되돌리기, 주석, 줄 옮기기 등)는 editor.ts의 CodeMirror 기본 키맵에 있고,
 // 여기서는 서로 다른 키와 마우스 동작만 정의해 그보다 먼저 적용합니다.
 // (브라우저가 가로채는 키는 쓸 수 없습니다. 예: IntelliJ의 Ctrl+W 선택 확장은 탭 닫기라 넣지 않음)
+// Vim은 @replit/codemirror-vim(MIT)을 씁니다.
 import { EditorSelection, Prec, type Extension, type StateCommand } from '@codemirror/state';
 import {
     crosshairCursor,
@@ -12,13 +13,17 @@ import {
 } from '@codemirror/view';
 import {
     copyLineDown,
+    cursorMatchingBracket,
     deleteLine,
     indentSelection,
     insertBlankLine,
+    lineComment,
+    lineUncomment,
     moveLineDown,
     moveLineUp,
     toggleBlockComment,
 } from '@codemirror/commands';
+import { vim } from '@replit/codemirror-vim';
 import {
     gotoLine,
     openSearchPanel,
@@ -26,12 +31,46 @@ import {
     selectSelectionMatches,
 } from '@codemirror/search';
 
-export type KeymapName = 'vscode' | 'intellij';
+export type KeymapName = 'vscode' | 'intellij' | 'visualstudio' | 'vim';
 
 export const KEYMAPS: { id: KeymapName; label: string }[] = [
     { id: 'vscode', label: 'VS Code' },
     { id: 'intellij', label: 'IntelliJ' },
+    { id: 'visualstudio', label: 'Visual Studio' },
+    { id: 'vim', label: 'Vim' },
 ];
+
+export const isKeymapName = (value: unknown): value is KeymapName =>
+    KEYMAPS.some((k) => k.id === value);
+
+/**
+ * 파일 전체를 언어 규칙대로 다시 들여씁니다. 커서와 선택은 그대로 둡니다.
+ * (Visual Studio의 Ctrl+K, Ctrl+D 문서 서식, IntelliJ의 Ctrl+Alt+L 대신. 들여쓰기만 맞춤)
+ */
+export const reindentAll: StateCommand = ({ state, dispatch }) => {
+    const all = state.update({ selection: { anchor: 0, head: state.doc.length } }).state;
+    indentSelection({
+        state: all,
+        dispatch: (tr) =>
+            dispatch(
+                state.update({
+                    changes: tr.changes,
+                    selection: state.selection.map(tr.changes),
+                    userEvent: 'input.indent',
+                })
+            ),
+    });
+    return true;
+};
+
+/** Visual Studio의 Ctrl+L: 커서가 있는 줄을 잘라 클립보드에 넣습니다. */
+const cutLine: Command = (view) => {
+    const { state } = view;
+    const lines = new Set(state.selection.ranges.map((r) => state.doc.lineAt(r.head).number));
+    const text = [...lines].map((n) => state.doc.line(n).text + state.lineBreak).join('');
+    void navigator.clipboard?.writeText(text).catch(() => {});
+    return deleteLine(view);
+};
 
 /**
  * VS Code의 Ctrl+L: 커서가 있는 줄 전체를 고르고, 이미 줄 전체를 골랐으면 다음 줄까지 늘립니다.
@@ -104,21 +143,49 @@ const INTELLIJ_KEYS = [
     { key: 'Mod-r', run: openSearchPanel }, // 찾기 창에 바꾸기 칸이 같이 있음
     { key: 'Shift-Enter', run: insertBlankLine }, // 아래에 새 줄
     { key: 'Mod-Alt-i', run: indentSelection }, // 자동 들여쓰기
+    { key: 'Mod-Alt-l', run: reindentAll }, // 서식 (들여쓰기만)
+];
+
+const VISUAL_STUDIO_KEYS = [
+    // Ctrl+M, Ctrl+M(접기)는 CodeMirror 기본 Ctrl+M(Tab 포커스 모드)과 겹쳐 키맵 전체가 깨지므로 넣지 않습니다.
+    // 접기는 줄 번호 옆 화살표나 Ctrl+Shift+[로 합니다.
+    { key: 'Mod-l', run: cutLine }, // 줄 잘라내기
+    { key: 'Mod-Shift-l', run: deleteLine }, // 줄 삭제
+    { key: 'Mod-d', run: copyLineDown }, // 줄 복제
+    { key: 'Mod-k Mod-c', run: lineComment }, // 주석
+    { key: 'Mod-k Mod-u', run: lineUncomment }, // 주석 풀기
+    { key: 'Mod-k Mod-d', run: reindentAll }, // 문서 서식 (들여쓰기만)
+    { key: 'Mod-]', run: cursorMatchingBracket }, // 짝 괄호로
+    { key: 'Mod-g', run: gotoLine },
+    { key: 'Mod-h', run: openSearchPanel }, // 바꾸기
+    { key: 'Shift-Alt-.', run: selectNextOccurrence }, // 다음 같은 단어에 커서 추가
+    { key: 'Shift-Alt-;', run: selectSelectionMatches }, // 같은 단어 모두
 ];
 
 /** 키맵과 그에 맞는 마우스 동작 (커서 추가, 세로 선택) */
 export const keymapExtension = (name: KeymapName): Extension =>
-    name === 'intellij'
-        ? [
-              Prec.high(keymap.of(INTELLIJ_KEYS)),
-              // IntelliJ: Alt+Shift+클릭으로 커서 추가, Alt+끌기로 세로 선택
-              EditorView.clickAddsSelectionRange.of((e) => e.altKey && e.shiftKey),
-              rectangularSelection({ eventFilter: (e) => e.altKey && !e.shiftKey }),
-              crosshairCursor({ key: 'Alt' }),
-          ]
-        : [
-              Prec.high(keymap.of(VSCODE_KEYS)),
-              // VS Code: Alt+클릭으로 커서 추가, Shift+Alt+끌기로 세로 선택
-              EditorView.clickAddsSelectionRange.of((e) => e.altKey && !e.shiftKey),
-              rectangularSelection({ eventFilter: (e) => e.altKey && e.shiftKey }),
-          ];
+    name === 'vim'
+        ? // Vim 모드는 다른 키맵보다 먼저 키를 받아야 합니다. (아래에 모드 표시줄)
+          [Prec.highest(vim({ status: true }))]
+        : name === 'visualstudio'
+          ? [
+                Prec.high(keymap.of(VISUAL_STUDIO_KEYS)),
+                // Visual Studio: Ctrl+Alt+클릭으로 커서 추가, Alt+끌기로 세로 선택
+                EditorView.clickAddsSelectionRange.of((e) => e.ctrlKey && e.altKey),
+                rectangularSelection({ eventFilter: (e) => e.altKey && !e.ctrlKey }),
+                crosshairCursor({ key: 'Alt' }),
+            ]
+          : name === 'intellij'
+            ? [
+                  Prec.high(keymap.of(INTELLIJ_KEYS)),
+                  // IntelliJ: Alt+Shift+클릭으로 커서 추가, Alt+끌기로 세로 선택
+                  EditorView.clickAddsSelectionRange.of((e) => e.altKey && e.shiftKey),
+                  rectangularSelection({ eventFilter: (e) => e.altKey && !e.shiftKey }),
+                  crosshairCursor({ key: 'Alt' }),
+              ]
+            : [
+                  Prec.high(keymap.of(VSCODE_KEYS)),
+                  // VS Code: Alt+클릭으로 커서 추가, Shift+Alt+끌기로 세로 선택
+                  EditorView.clickAddsSelectionRange.of((e) => e.altKey && !e.shiftKey),
+                  rectangularSelection({ eventFilter: (e) => e.altKey && e.shiftKey }),
+              ];

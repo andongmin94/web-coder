@@ -1,4 +1,4 @@
-// 설정 창의 에디터·화면 설정: 테마, 화면 밝기, 글꼴, 글자 크기, 줄바꿈, 단축키.
+// 설정 창의 에디터·화면 설정: 테마, 화면 밝기, 글꼴, 글자 크기, 줄바꿈, 단축키(VS Code, IntelliJ, Visual Studio, Vim).
 // 바꾼 값은 바로 적용하고 prefs에 저장합니다.
 import type { CodeEditor } from './editor.ts';
 import {
@@ -10,7 +10,7 @@ import {
     queryAllFontFamilies,
 } from './fonts.ts';
 import { AUTO_THEME, EDITOR_THEMES } from './themes.ts';
-import { KEYMAPS, type KeymapName } from './keymaps.ts';
+import { isKeymapName, KEYMAPS, type KeymapName } from './keymaps.ts';
 import { storage } from './storage.ts';
 import { $, h } from './dom.ts';
 
@@ -179,7 +179,7 @@ export const setupEditorSettings = (editor: CodeEditor, showToast: ShowToast) =>
         renderFontOptions();
         applyFontSize(size);
         editor.setWrap(wrapCheckbox.checked);
-        keymapSelect.value = prefs.editorKeymap === 'intellij' ? 'intellij' : 'vscode';
+        keymapSelect.value = isKeymapName(prefs.editorKeymap) ? prefs.editorKeymap : 'vscode';
         editor.setKeymap(keymapSelect.value as KeymapName);
     });
 

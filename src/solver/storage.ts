@@ -13,7 +13,7 @@ export type Prefs = {
     /** 긴 줄 자동 줄바꿈 (없으면 켬) */
     editorWrap?: boolean;
     /** 에디터 단축키 (없으면 VS Code) */
-    editorKeymap?: 'vscode' | 'intellij';
+    editorKeymap?: 'vscode' | 'intellij' | 'visualstudio' | 'vim';
     /** 에디터 글꼴 이름 (PC에 설치된 글꼴, 없으면 기본 목록) */
     editorFont?: string;
     /** 문제 패널을 접어 두었는지 */
