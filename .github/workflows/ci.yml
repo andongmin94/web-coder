@@ -1,0 +1,22 @@
+name: CI
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+
+jobs:
+    check:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  # build.ts와 테스트를 Node의 내장 TypeScript 실행으로 돌립니다.
+                  node-version: 24
+                  cache: npm
+            - run: npm ci
+            - run: npm run typecheck
+            - run: npx oxlint .
+            - run: npm test
+            - run: npm run build
