@@ -4,6 +4,7 @@
 // 재귀 깊이가 수천에서 막힙니다. (백준은 node --stack-size=65536으로 실행해 훨씬 깊게 됩니다)
 // 그때 C 스택을 크게 잡아 빌드한 QuickJS를 깊은 재귀 계측(deep-stack.ts)과 함께 실행합니다.
 // 깊이 약 60만까지 됩니다. 대신 V8보다 수십 배 느립니다.
+import { fetchAsset } from '../shared/assets.ts';
 import boot from './node-deep-boot.js.txt';
 import prelude from './node-prelude.js.txt';
 import { WASI_DEEP_STACK, instrumentDeepStack } from './deep-stack.ts';
@@ -20,7 +21,7 @@ let deepModule: Promise<WebAssembly.Module | null> | null = null;
 /** 깊은 재귀 계측을 한 QuickJS. 처음 필요할 때 한 번만 만듭니다. 고칠 수 없으면 null */
 const loadModule = () => {
     deepModule ??= (async () => {
-        const response = await fetch(new URL(`/${QUICKJS_PATH}`, self.location.origin));
+        const response = await fetchAsset(new URL(`/${QUICKJS_PATH}`, self.location.origin));
         if (!response.ok) throw new Error(`QuickJS를 불러오지 못했습니다. (${response.status})`);
         const patched = instrumentDeepStack(
             new Uint8Array(await response.arrayBuffer()),

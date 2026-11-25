@@ -59,7 +59,7 @@ const run = (req: Extract<SandboxRequest, { type: 'run' }>) => {
             | { type: 'started' }
             | { type: 'output'; stdout: string; stderr: string; reset: boolean }
             | { type: 'error'; message: string }
-            | ({ type: 'done'; timeMs: number } & ProcessOutput);
+            | ({ type: 'done'; timeMs: number; deep?: boolean } & ProcessOutput);
         if (data.type === 'started') {
             clearTimeout(timer);
             timer = window.setTimeout(
@@ -83,6 +83,7 @@ const run = (req: Extract<SandboxRequest, { type: 'run' }>) => {
             status: timeMs > req.timeoutMs ? 'timeout' : exitCode === 0 ? 'ok' : 'runtime-error',
             output: { stdout, stderr, exitCode, truncated, stackOverflow },
             timeMs,
+            deep: data.deep,
         });
     };
     worker.onerror = (event) => {
@@ -91,7 +92,8 @@ const run = (req: Extract<SandboxRequest, { type: 'run' }>) => {
     };
 
     running.set(req.id, finish);
-    if (req.language === 'java') worker.postMessage({ artifact: req.artifact, stdin: req.stdin });
+    if (req.language === 'java')
+        worker.postMessage({ artifact: req.artifact, stdin: req.stdin, deep: req.deep });
     else worker.postMessage({ source: req.source, stdin: req.stdin });
 };
 

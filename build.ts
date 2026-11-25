@@ -14,12 +14,18 @@ const clangPkg = JSON.parse(await readFile('node_modules/@yowasp/clang/package.j
 };
 const YOWASP_GEN = 'node_modules/@yowasp/clang/gen';
 
-/** 설치 용량을 줄이려고 gzip으로 담는 큰 리소스 (dist 기준 경로). 컴파일 워커의 gz-fetch.ts가 풀어 씁니다. */
+/** 설치 용량을 줄이려고 gzip으로 담는 큰 리소스 (dist 기준 경로). 불러올 때 풀어 씁니다. */
 const GZIP_ASSETS = [
     'clang/llvm.core.wasm',
     'clang/llvm-resources.tar',
     'clang-eh/libc++.a',
     'clang-eh/libc++abi.a',
+    // 아래는 shared/assets.ts의 fetchAsset이 풀어 씁니다.
+    'wasm/python-3.13.17.wasm',
+    'wasm/quickjs-0.18.0.wasm',
+    'java/compiler.wasm',
+    'format/clang-format.wasm',
+    'format/ruff_fmt_bg.wasm',
 ];
 
 const manifest = {
@@ -122,6 +128,7 @@ const common: esbuild.BuildOptions = {
     assetNames: 'assets/[name]-[hash]',
     // 번들된 런타임(TeaVM, YoWASP)의 Node 전용 분기는 브라우저에서 실행되지 않습니다.
     external: ['node:*'],
+    define: { GZIP_ASSETS: JSON.stringify(GZIP_ASSETS) },
 };
 
 const entries: esbuild.BuildOptions[] = [

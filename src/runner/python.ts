@@ -1,4 +1,5 @@
 // Python 3: CPython 3.13 WASI 빌드 (tools/python/README.md)
+import { fetchAsset } from '../shared/assets.ts';
 import { WASI_DEEP_STACK, instrumentDeepStack } from './deep-stack.ts';
 import { jspi } from './jspi.ts';
 import { loadBaseFS, loadModule, runWasi, textFile } from './wasi.ts';
@@ -23,7 +24,7 @@ const DEEP_OVERFLOW_NOTE =
 let deepModule: Promise<WebAssembly.Module | null> | null = null;
 const loadDeepModule = () => {
     deepModule ??= (async () => {
-        const response = await fetch(new URL(`/${PYTHON}`, self.location.origin));
+        const response = await fetchAsset(new URL(`/${PYTHON}`, self.location.origin));
         const patched = instrumentDeepStack(
             new Uint8Array(await response.arrayBuffer()),
             WASI_DEEP_STACK

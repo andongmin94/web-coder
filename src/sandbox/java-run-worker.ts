@@ -5,11 +5,13 @@ import { setProgressSink } from '../runner/output.ts';
 
 const post = (message: unknown) => (self as unknown as Worker).postMessage(message);
 
-self.onmessage = async (event: MessageEvent<{ artifact: Uint8Array; stdin: string }>) => {
+self.onmessage = async (
+    event: MessageEvent<{ artifact: Uint8Array; stdin: string; deep?: boolean }>
+) => {
     try {
         // 시간 초과로 강제 종료돼도 그때까지의 출력을 보여 줄 수 있게 실행 중에 흘려보냅니다.
         setProgressSink((stdout, stderr, reset) => post({ type: 'output', stdout, stderr, reset }));
-        const execute = await loadJava(event.data.artifact, event.data.stdin);
+        const execute = await loadJava(event.data.artifact, event.data.stdin, event.data.deep);
         post({ type: 'started' });
         const started = performance.now();
         const { elapsedMs, ...output } = await execute();

@@ -4,6 +4,7 @@
 // - C++ 결과물/Python: 실행 워커 풀에서 병렬 실행, 시간 초과 시 terminate 후 교체
 // - JavaScript: sandbox 페이지(eval 허용)의 워커에서 V8로 실행
 //               재귀가 깊어 스택이 넘치면 실행 워커의 QuickJS 깊은 재귀 모드로 다시 실행 (node-deep.ts)
+import { fetchAsset } from '../shared/assets.ts';
 import { JAVA_RELEASES, type ResolvedLanguage } from '../shared/languages.ts';
 import type {
     SandboxCheckResponse,
@@ -41,6 +42,8 @@ const isJsStackOverflow = (result: RunResult) =>
 const NODE_DEEP_NOTICE =
     '재귀가 깊어 브라우저의 호출 스택이 넘쳤기 때문에 깊은 재귀 모드(QuickJS)로 다시 실행했습니다. ' +
     '백준(node --stack-size=65536)에서는 통과하는 깊이입니다. 이 모드는 실제 node.js보다 느려서 실행 시간은 참고용입니다.';
+const NODE_DEEP_TIMEOUT_NOTICE =
+    ' 이번 시간 초과도 이 모드가 느려서일 수 있으니, 깊은 재귀를 반복문(스택)으로 바꾸면 여기서도 확인할 수 있습니다.';
 
 type Final<T> = Exclude<T, { type: 'started' } | { type: 'output' }>;
 /** 실행 중 받은 출력 (시간 초과 시 보여 줄 부분 출력) */
@@ -260,7 +263,7 @@ class Sandbox {
         this.javaAssetsSent ??= (async () => {
             if (!(await this.waitReady())) throw new Error('sandbox 페이지를 불러오지 못했습니다.');
             const read = async (path: string) => {
-                const response = await fetch(path);
+                const response = await fetchAsset(path);
                 if (!response.ok) throw new Error(`${path}를 불러오지 못했습니다.`);
                 return response.arrayBuffer();
             };
@@ -342,6 +345,8 @@ class Sandbox {
         stdin: string,
         timeoutMs: number
     ): Promise<RunResult> {
+        // 한 번 스택이 넘친 Java 프로그램의 다음 테스트는 넘칠 첫 시도를 건너뜁니다.
+        const deep = language === 'java' && payload.artifact === this.deepJavaArtifact;
         const cancelSeq = this.cancelSeq;
         const ready = await this.waitReady();
         // 준비를 기다리는 사이 중단했으면 실행하지 않습니다. (준비 전 보낸 중단 신호는 받을 곳이 없음)
@@ -358,7 +363,15 @@ class Sandbox {
         const res = await this.request<SandboxRunResponse>(
             (id) =>
                 language === 'java'
-                    ? { type: 'run', id, language, artifact: payload.artifact!, stdin, timeoutMs }
+                    ? {
+                          type: 'run',
+                          id,
+                          language,
+                          artifact: payload.artifact!,
+                          stdin,
+                          timeoutMs,
+                          deep,
+                      }
                     : { type: 'run', id, language, source: payload.source, stdin, timeoutMs },
             // sandbox가 응답하지 않는 경우를 대비한 안전장치
             timeoutMs + LOAD_TIMEOUT_MS,
@@ -369,6 +382,7 @@ class Sandbox {
                 message: '실행기가 응답하지 않습니다.',
             })
         );
+        if (res.deep && payload.artifact) this.deepJavaArtifact = payload.artifact;
         return {
             status: res.status,
             output: res.output ?? EMPTY_OUTPUT,
@@ -376,6 +390,9 @@ class Sandbox {
             message: res.message,
         };
     }
+
+    /** 깊은 재귀 모드가 필요했던 Java 프로그램 (컴파일 결과) */
+    private deepJavaArtifact: Uint8Array | null = null;
 
     cancelAll() {
         this.cancelSeq++;
@@ -586,7 +603,9 @@ export class RunnerPool {
                 this.deepJsSource = payload.source;
             }
             const deep = await this.runInWorker('javascript', payload, stdin, timeoutMs);
-            return deep.status === 'cancelled' ? deep : { ...deep, notice: NODE_DEEP_NOTICE };
+            if (deep.status === 'cancelled') return deep;
+            const slow = deep.status === 'timeout' ? NODE_DEEP_TIMEOUT_NOTICE : '';
+            return { ...deep, notice: NODE_DEEP_NOTICE + slow };
         }
         return this.runInWorker(lang.runtime, payload, stdin, timeoutMs);
     }

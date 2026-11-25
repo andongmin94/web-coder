@@ -22,6 +22,8 @@ export type SandboxRequest =
           artifact: Uint8Array;
           stdin: string;
           timeoutMs: number;
+          /** 앞선 테스트에서 스택이 넘친 프로그램: 처음부터 깊은 재귀 모드로 실행 */
+          deep?: boolean;
       }
     | {
           type: 'java-assets';
@@ -41,6 +43,8 @@ export type SandboxRunResponse = {
     output?: ProcessOutput;
     timeMs?: number;
     message?: string;
+    /** Java: 깊은 재귀 모드로 실행했는지 */
+    deep?: boolean;
 };
 
 export type SandboxCompileResponse = {

@@ -1,5 +1,6 @@
 // WASI 바이너리 실행 공통 로직 (clang, wasm-ld, python, 사용자 프로그램).
 import { WASI, type WASIFS } from '@runno/wasi';
+import { fetchAsset } from '../shared/assets.ts';
 import { parseTar } from './tar.ts';
 import { createDeepRunner, type DeepStackOptions } from './deep-stack.ts';
 import { isStackOverflow, jspi } from './jspi.ts';
@@ -14,7 +15,7 @@ const moduleCache = new Map<string, Promise<WebAssembly.Module>>();
 export const loadModule = (path: string): Promise<WebAssembly.Module> => {
     let cached = moduleCache.get(path);
     if (!cached) {
-        cached = WebAssembly.compileStreaming(fetch(assetURL(path)));
+        cached = WebAssembly.compileStreaming(fetchAsset(assetURL(path)));
         cached.catch(() => moduleCache.delete(path));
         moduleCache.set(path, cached);
     }

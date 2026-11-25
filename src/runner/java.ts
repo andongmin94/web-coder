@@ -314,26 +314,46 @@ const loadProgram = async (
  * 프로그램을 실행할 함수를 돌려줍니다. 호출 스택이 넘치면 깊은 재귀 모드로 한 번 다시 실행합니다.
  * (프로그램 상태가 이미 바뀌었으므로 고친 모듈을 새로 불러와 처음부터 실행)
  */
-export const loadJava = async (artifact: Uint8Array, stdin: string) => {
+export type JavaOutput = ProcessOutput & {
+    elapsedMs?: number;
+    /** 깊은 재귀 모드로 실행했는지. 같은 프로그램의 다음 테스트는 넘칠 첫 시도를 건너뜁니다. */
+    deep?: boolean;
+};
+
+/**
+ * startDeep: 앞선 테스트에서 이미 스택이 넘친 프로그램이면 처음부터 깊은 재귀 모드로 실행합니다.
+ */
+export const loadJava = async (artifact: Uint8Array, stdin: string, startDeep = false) => {
+    const loadDeep = async () => {
+        const api = jspi();
+        const patched = api && instrumentDeepStackWithMap(artifact, JAVA_DEEP_STACK);
+        if (!api || !patched) return null;
+        return loadProgram(patched.module, stdin, {
+            deep: api,
+            debugModule: artifact,
+            toOriginal: patched.toOriginal,
+        });
+    };
+    const runDeep = async (deepRun: Awaited<ReturnType<typeof loadProgram>>) => {
+        const started = performance.now();
+        const { stackOverflow: _again, ...output } = await deepRun();
+        return { ...output, elapsedMs: performance.now() - started, deep: true };
+    };
+
+    // 불러오는 시간이 시간 제한에 들어가지 않게 실행 전에 준비합니다.
+    const ready = startDeep ? await loadDeep() : null;
+    if (ready) return (): Promise<JavaOutput> => runDeep(ready);
+
     const run = await loadProgram(artifact, stdin, {
         deep: null,
         debugModule: artifact,
         toOriginal: null,
     });
-    return async (): Promise<ProcessOutput & { elapsedMs?: number }> => {
+    return async (): Promise<JavaOutput> => {
         const { stackOverflow, ...first } = await run();
-        const api = jspi();
-        if (!stackOverflow || !api) return first;
-        const patched = instrumentDeepStackWithMap(artifact, JAVA_DEEP_STACK);
-        if (!patched) return first;
-        const deepRun = await loadProgram(patched.module, stdin, {
-            deep: api,
-            debugModule: artifact,
-            toOriginal: patched.toOriginal,
-        });
+        if (!stackOverflow) return first;
+        const deepRun = await loadDeep();
         // 실패한 첫 시도와 다시 불러오는 시간은 실행 시간에서 뺍니다.
-        const started = performance.now();
-        const { stackOverflow: _again, ...output } = await deepRun();
-        return { ...output, elapsedMs: performance.now() - started };
+        return deepRun ? runDeep(deepRun) : first;
     };
 };

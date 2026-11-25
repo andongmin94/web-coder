@@ -5,6 +5,7 @@ import { Facet } from '@codemirror/state';
 import type { Command, EditorView } from '@codemirror/view';
 import initClang, { format as clangFormat } from '@wasm-fmt/clang-format/web';
 import initRuff, { format as ruffFormat } from '@wasm-fmt/ruff_fmt/web';
+import { fetchAsset } from '../shared/assets.ts';
 import type { RuntimeInfo } from '../shared/languages.ts';
 
 export type FormatLanguage = RuntimeInfo['editor'];
@@ -30,7 +31,7 @@ const CLANG_FILE: Record<
 type WasmSource = Response | BufferSource;
 /** wasm 파일을 가져오는 방법 (테스트에서는 파일을 직접 읽음) */
 let loadWasm = (file: string): Promise<WasmSource> =>
-    fetch(new URL(`format/${file}`, location.href));
+    fetchAsset(new URL(`format/${file}`, location.href));
 
 export const setFormatWasmLoader = (loader: (file: string) => Promise<WasmSource>) => {
     loadWasm = loader;
