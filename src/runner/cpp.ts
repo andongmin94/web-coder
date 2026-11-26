@@ -1,6 +1,7 @@
 // 컴파일된 C++ 프로그램(wasm32-wasip1) 실행
 import { CPP_DEEP_STACK, instrumentDeepStack } from './deep-stack.ts';
 import { jspi } from './jspi.ts';
+import { notifyRestart } from './output.ts';
 import { runWasi } from './wasi.ts';
 import { CPP_STACK_SIZE, type ProcessOutput } from './types.ts';
 
@@ -66,14 +67,16 @@ export const prepareCpp = async (artifact: Uint8Array) => {
             if (!jspi()) return withoutStack({ ...output, stderr: output.stderr + NO_JSPI_NOTE });
             first = output;
         }
-        const deepModule = await (program.deep ??= compileDeep(artifact));
+        // 변환이 실패하면(예외 포함) 깊은 재귀 없이 첫 결과를 돌려줍니다. (매번 내부 오류로 끝나지 않게)
+        const deepModule = await (program.deep ??= compileDeep(artifact).catch(() => null));
         if (!deepModule)
             return first
                 ? withoutStack(first)
                 : { stdout: '', stderr: '', exitCode: 134, truncated: false };
         program.needsDeep = true;
 
-        // 실패한 첫 시도는 실행 시간에서 뺍니다.
+        // 실패한 첫 시도와 모듈을 고치는 시간은 실행 시간과 시간 제한에서 뺍니다.
+        if (first) notifyRestart();
         const started = performance.now();
         const {
             fs: _fs,

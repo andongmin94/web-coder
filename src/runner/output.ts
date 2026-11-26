@@ -28,12 +28,32 @@ export const setProgressSink = (sink: ProgressSink | null) => {
 };
 
 /**
+ * 스택이 넘쳐 깊은 재귀 모드로 처음부터 다시 실행하기 직전에 부릅니다. 실행을 맡긴 쪽은 시간 제한을
+ * 여기서부터 다시 재고(실패한 첫 시도와 모듈을 고치는 시간은 빼고) 지금까지 받은 출력을 버립니다.
+ */
+let restartSink: (() => void) | null = null;
+export const setRestartSink = (sink: (() => void) | null) => {
+    restartSink = sink;
+};
+export const notifyRestart = () => restartSink?.();
+
+/**
  * 출력이 이만큼 쌓일 때까지는 쓰는 즉시 보내고, 그 뒤로는 간격을 두고 모아 보냅니다.
  * 모아 둔 출력은 다음 쓰기 때 나가므로, 그 전에 프로그램이 멈추면(무한 루프) 보여 주지 못합니다.
  * 그래서 디버깅에 흔한 작은 출력은 하나도 빠지지 않게 하고, 큰 출력에서만 속도를 위해 모읍니다.
  */
 export const EAGER_OUTPUT_CHARS = 64 << 10;
 export const FLUSH_INTERVAL_MS = 2;
+
+/** 출력 규칙을 한데 모은 것. 바깥 값을 쓸 수 없는 JS 실행 워커(sandbox/js-worker.ts)에 넘깁니다. */
+export const OUTPUT_RULES = {
+    stdoutLimit: OUTPUT_LIMIT,
+    stderrLimit: STDERR_LIMIT,
+    stderrCut: STDERR_CUT,
+    eagerChars: EAGER_OUTPUT_CHARS,
+    flushMs: FLUSH_INTERVAL_MS,
+};
+export type OutputRules = typeof OUTPUT_RULES;
 
 export class OutputCollector {
     stdout = '';

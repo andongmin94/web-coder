@@ -172,3 +172,14 @@ test('한글 식별자 뒤에서도 단어 시작을 찾는다', async () => {
     const { wordStart } = await import('./types.ts');
     assert.equal(wordStart('int 점수합 = 점수', 12), 10);
 });
+
+test('시그니처: 문자열 안의 쉼표와 괄호는 세지 않는다', () => {
+    const at = (code: string) => javaSignature(index, code, code.length);
+    // "(" 안의 괄호 때문에 힌트가 사라지거나, "%d, %d" 안의 쉼표 때문에 칸이 밀리지 않음
+    for (const arg of ['"("', '"%d, %d"', "'('"]) {
+        const sig = at(`class Main { void f() { System.out.printf(${arg}, `);
+        assert.ok(sig, arg);
+        assert.equal(sig![0].label, 'printf(String, Object[]) → PrintStream', arg);
+        assert.deepEqual(sig![0].active, [15, 23], arg); // 두 번째 매개변수 Object[]
+    }
+});

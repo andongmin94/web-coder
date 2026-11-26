@@ -36,7 +36,7 @@
     - **node.js**: sandbox 페이지의 워커에서 Chrome V8로 직접 실행. Node처럼 모듈 함수로 감싸 실행하고(최상위 `return`, `__dirname`), `fs.readFileSync('/dev/stdin')`(인코딩이 없으면 `Buffer`), `readline`, `process.exit`, `Buffer`, `path`·`assert`·`events`·`util` 모듈을 지원합니다. `console.log`의 객체·배열 출력 형식도 Node와 같습니다.
         - 백준은 `node --stack-size=65536`으로 실행하지만 브라우저 워커는 스택을 늘릴 수 없어 재귀가 수천에서 막힙니다. 그때는 C 스택을 크게 잡아 직접 빌드한 QuickJS로 자동으로 다시 실행합니다. (깊이 약 60만, [tools/quickjs/README.md](./tools/quickjs/README.md))
     - **Java**: OpenJDK javac + [TeaVM](https://teavm.org)을 wasm으로 빌드한 [teavm-javac](https://github.com/konsoletyper/teavm-javac)로 컴파일하고 WebAssembly(GC)로 실행. `Scanner`, `BufferedReader`/`BufferedWriter`, 컬렉션, `record`, `Thread`(`new Thread(null, r, "", 1 << 26)` 포함) 등 지원. 잡히지 않은 예외와 `printStackTrace()`는 JVM처럼 `at Main.solve(Main.java:12)` 형식의 스택 트레이스를 보여 주고, 컴파일 에러에는 javac처럼 해당 소스 줄과 위치(`^`)가 붙습니다. 빌드·패치 방법은 [tools/java/README.md](./tools/java/README.md)
-- **깊은 재귀**: 브라우저는 호출 스택이 약 1MB로 고정이라 재귀가 수천 단계에서 죽습니다. 스택이 넘치면 wasm을 고쳐 JSPI로 스택을 이어 붙이는 모드로 자동으로 다시 실행합니다. (C++·Java·Python 깊이 100만, node.js 약 60만 확인. Chrome 137 이상. 원리는 [src/runner/deep-stack.ts](./src/runner/deep-stack.ts))
+- **깊은 재귀**: 브라우저는 호출 스택이 약 1MB로 고정이라 재귀가 수천 단계에서 죽습니다. 스택이 넘치면 wasm을 고쳐 JSPI로 스택을 이어 붙이는 모드로 자동으로 다시 실행합니다. (C++·Java·Python 깊이 100만, node.js 약 60만 확인. Chrome 137 이상. 다시 실행할 때는 실패한 첫 시도와 모듈을 고치는 시간을 시간 제한에서 뺍니다. 원리는 [src/runner/deep-stack.ts](./src/runner/deep-stack.ts))
 - 예제 자동 판정 (BOJ처럼 줄 끝 공백·마지막 빈 줄 무시), stdout/stderr 분리
 - 스페셜 저지 문제는 본문에서 허용 오차(예: 10<sup>-9</sup>)를 찾아, 실수 출력을 그 오차 안에서 비교합니다. 오차를 못 찾으면 출력만 보여 줍니다.
 - C++·Python은 메모리 사용량을 보여 주고, 백준의 언어별 메모리 제한(Python ×2+32MB, PyPy3 ×2+128MB 등)을 넘으면 알려 줍니다. (wasm 기준 근삿값이라 판정은 바꾸지 않음)
@@ -70,6 +70,8 @@
 | Java    | javac(진단) + JDK 시그니처 색인으로 타입 추론 (`sc.`, `list.get(0).`, `System.out.` 등)                 | ✓             | ✓        | ✓           | ✓    |
 
 - Java는 IntelliJ식 라이브 템플릿을 제공합니다: `sout`, `fori`, `br`, `st`, `pint`, `sb`, `psvm`
+- Java 자동완성 색인은 고른 버전(Java 8, 11, 15, 최신)의 JDK에서 만들어, Java 8에서 `String.repeat` 같은 나중 버전 API를 제안하지 않습니다.
+- 고르지 않은 언어의 분석 엔진(Pyright, TypeScript 워커)은 5분 뒤 끕니다.
 - C++는 `bits/stdc++.h` PCH가 만들어진 뒤로 자동완성 0.1초, 진단 0.2초 안팎으로 응답합니다. (처음 한 번은 PCH를 만드느라 몇 초 걸림)
 
 ## 구조

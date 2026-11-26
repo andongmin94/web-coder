@@ -18,5 +18,6 @@ jobs:
             - run: npm ci
             - run: npm run typecheck
             - run: npx oxlint .
+            - run: npx oxfmt --config .oxfmtrc.json --check .
             - run: npm test
             - run: npm run build

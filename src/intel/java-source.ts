@@ -15,15 +15,15 @@ export const blankLiterals = (code: string) =>
         m.replace(/[^\n]/g, ' ')
     );
 
-/** 최상위 쉼표로 나누기 (괄호/꺾쇠 안은 무시) */
-const splitTop = (text: string) => {
+/** 최상위 구분자(기본 쉼표)로 나누기 (괄호/꺾쇠 안은 무시) */
+export const splitTop = (text: string, sep = ',') => {
     const parts: string[] = [];
     let depth = 0;
     let current = '';
     for (const ch of text) {
         if ('<([{'.includes(ch)) depth++;
         else if ('>)]}'.includes(ch)) depth--;
-        if (ch === ',' && depth === 0) {
+        if (ch === sep && depth === 0) {
             parts.push(current.trim());
             current = '';
         } else current += ch;
@@ -33,7 +33,8 @@ const splitTop = (text: string) => {
 };
 
 const MODIFIERS = String.raw`(?:(?:public|private|protected|static|final|abstract|synchronized|native|default|volatile|transient|strictfp)\s+)*`;
-const TYPE = String.raw`(?:[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)(?:\s*<[^;(){}=]*?>)?(?:\s*\[\s*\])*`;
+/** 타입 표기: 이름(점으로 이어진), 제네릭 인자, 배열 차원 */
+export const TYPE = String.raw`(?:[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)(?:\s*<[^;(){}=]*?>)?(?:\s*\[\s*\])*`;
 const ANNOTATIONS = String.raw`(?:@\w+(?:\([^)]*\))?\s+)*`;
 const NOT_A_TYPE =
     /^(return|new|throw|else|case|import|package|class|interface|enum|record|if|for|while|do|switch|try|catch|finally|break|continue|assert|yield)$/;

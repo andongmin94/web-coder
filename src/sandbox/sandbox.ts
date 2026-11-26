@@ -14,6 +14,8 @@ import type {
 } from './protocol.ts';
 import type { CompilerResponse, ProcessOutput } from '../runner/types.ts';
 import type { JavaCheckDiagnostic } from './java-compiler-worker.ts';
+import { createWatchdog } from '../runner/watchdog.ts';
+import { OUTPUT_RULES } from '../runner/output.ts';
 
 const LOAD_TIMEOUT_MS = 30_000;
 const COMPILE_TIMEOUT_MS = 120_000;
@@ -22,7 +24,9 @@ const ownerOrigin = new URL(location.href).origin;
 const blobURL = (source: string) =>
     URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
 
-const jsWorkerURL = blobURL(`(${jsWorkerMain.toString()})(${JSON.stringify(prelude)});`);
+const jsWorkerURL = blobURL(
+    `(${jsWorkerMain.toString()})(${JSON.stringify(prelude)}, ${JSON.stringify(OUTPUT_RULES)});`
+);
 const javaCompilerURL = blobURL(javaCompilerSource);
 const javaRunURL = blobURL(javaRunSource);
 
@@ -32,15 +36,50 @@ const reply = (message: SandboxResponse, transfer: Transferable[] = []) =>
 // ── 실행 (JS, Java 공통) ────────────────────────────────────────────
 
 type Finish = (r: Omit<SandboxRunResponse, 'kind' | 'id'>) => void;
+/** 실행 중이거나 차례를 기다리는 실행 (중단할 때 모두 끝냄) */
 const running = new Map<number, Finish>();
 
+/**
+ * 동시에 돌리는 실행 수. 테스트마다 워커를 바로 띄우면(Java는 런타임까지 각자 불러옴) CPU를 나눠 쓰느라
+ * 시간이 부풀어 거짓 시간 초과가 나므로, C++·Python 실행 워커 풀(pool.ts)처럼 몇 개씩만 돌립니다.
+ */
+const MAX_RUNS = Math.max(1, Math.min(4, navigator.hardwareConcurrency || 2));
+let activeRuns = 0;
+const waitingRuns: Extract<SandboxRequest, { type: 'run' }>[] = [];
+
 const run = (req: Extract<SandboxRequest, { type: 'run' }>) => {
+    if (activeRuns >= MAX_RUNS) {
+        waitingRuns.push(req);
+        // 기다리는 동안 중단되면 차례에서 빼고 끝냅니다.
+        running.set(req.id, (result) => {
+            const i = waitingRuns.indexOf(req);
+            if (i >= 0) waitingRuns.splice(i, 1);
+            running.delete(req.id);
+            reply({ kind: 'run', id: req.id, ...result });
+        });
+        return;
+    }
+    startRun(req);
+};
+
+const startRun = (req: Extract<SandboxRequest, { type: 'run' }>) => {
+    activeRuns++;
     const worker = new Worker(req.language === 'java' ? javaRunURL : jsWorkerURL);
-    let timer = window.setTimeout(
-        () => finish({ status: 'internal-error', message: '실행기를 시작하지 못했습니다.' }),
-        LOAD_TIMEOUT_MS
+    const watchdog = createWatchdog(LOAD_TIMEOUT_MS, req.timeoutMs + 100, (phase) =>
+        finish(
+            phase === 'load'
+                ? { status: 'internal-error', message: '실행기를 시작하지 못했습니다.' }
+                : {
+                      status: 'timeout',
+                      timeMs: req.timeoutMs,
+                      output: partialOutput(),
+                      deep: deepUsed || undefined,
+                  }
+        )
     );
     let done = false;
+    /** 깊은 재귀 모드로 다시 실행했는지 (시간 초과로 끝나도 알려 줌) */
+    let deepUsed = false;
     // 실행 중 받은 출력. 시간 초과·중단으로 워커를 종료해도 여기까지는 보여 줍니다.
     const partial = { stdout: '', stderr: '' };
     const partialOutput = (): ProcessOutput => ({ ...partial, exitCode: -1, truncated: false });
@@ -48,24 +87,25 @@ const run = (req: Extract<SandboxRequest, { type: 'run' }>) => {
     const finish: Finish = (result) => {
         if (done) return;
         done = true;
-        clearTimeout(timer);
+        watchdog.stop();
         worker.terminate();
         running.delete(req.id);
         reply({ kind: 'run', id: req.id, ...result });
+        activeRuns--;
+        const next = waitingRuns.shift();
+        if (next) startRun(next);
     };
 
     worker.onmessage = (event) => {
         const data = event.data as
-            | { type: 'started' }
+            | { type: 'started'; deep?: boolean }
             | { type: 'output'; stdout: string; stderr: string; reset: boolean }
             | { type: 'error'; message: string }
             | ({ type: 'done'; timeMs: number; deep?: boolean } & ProcessOutput);
         if (data.type === 'started') {
-            clearTimeout(timer);
-            timer = window.setTimeout(
-                () => finish({ status: 'timeout', timeMs: req.timeoutMs, output: partialOutput() }),
-                req.timeoutMs + 100
-            );
+            // 깊은 재귀 모드로 다시 실행할 때도 옵니다. (시간 제한을 그때부터 다시 잼)
+            if (data.deep) deepUsed = true;
+            watchdog.started();
             return;
         }
         if (data.type === 'output') {
@@ -125,6 +165,9 @@ const getCompiler = () => {
         for (const [id, resolve] of compiles)
             resolve({ type: 'error', id, message: event.message || '컴파일러 워커 오류' });
         compiles.clear();
+        // 망가졌을 수 있는 워커는 버리고 다음 요청에서 새로 만듭니다. (다음 컴파일이 시간 제한까지 멈추지 않게)
+        worker.terminate();
+        if (compiler === worker) compiler = null;
     };
     // 복사해서 넘깁니다. (워커를 다시 만들 때 또 써야 함)
     worker.postMessage({ type: 'assets', ...javaAssets });
@@ -215,6 +258,9 @@ window.addEventListener('message', (event: MessageEvent<SandboxRequest>) => {
             void checkJava(req);
             break;
         case 'cancel':
+            // 기다리던 실행부터 빼야, 실행 중인 것을 끝낼 때 기다리던 것이 새로 시작되지 않습니다.
+            for (const queued of waitingRuns.splice(0))
+                running.get(queued.id)?.({ status: 'cancelled' });
             for (const finish of [...running.values()]) finish({ status: 'cancelled' });
             // 컴파일 중이면 컴파일러를 끊습니다. (javac는 중간에 멈출 방법이 없어 워커째 끝냄)
             // 다음 컴파일 때 새로 만들며, 실시간 진단도 같은 워커라 함께 끝납니다.

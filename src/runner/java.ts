@@ -8,6 +8,7 @@ import {
     FLUSH_INTERVAL_MS,
     OutputCollector,
     OutputLimitError,
+    notifyRestart,
 } from './output.ts';
 import type { ProcessOutput } from './types.ts';
 
@@ -353,7 +354,9 @@ export const loadJava = async (artifact: Uint8Array, stdin: string, startDeep = 
         const { stackOverflow, ...first } = await run();
         if (!stackOverflow) return first;
         const deepRun = await loadDeep();
-        // 실패한 첫 시도와 다시 불러오는 시간은 실행 시간에서 뺍니다.
-        return deepRun ? runDeep(deepRun) : first;
+        if (!deepRun) return first;
+        // 실패한 첫 시도와 다시 불러오는 시간은 실행 시간과 시간 제한에서 뺍니다.
+        notifyRestart();
+        return runDeep(deepRun);
     };
 };

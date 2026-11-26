@@ -738,6 +738,14 @@ textarea {
     font-size: 12.5px;
 }
 
+.status-stale {
+    color: var(--warn);
+}
+
+.status-elapsed:empty {
+    display: none;
+}
+
 .spinner {
     width: 14px;
     height: 14px;

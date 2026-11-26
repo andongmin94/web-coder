@@ -8,12 +8,11 @@ import {
     parseClangDiagnostics,
     parseClangSignatures,
 } from './clang-parse.ts';
-import { wordStart, type LanguageIntel } from './types.ts';
+import { lineColOf, wordStart, type LanguageIntel } from './types.ts';
 
 /** clang의 줄/열(열은 UTF-8 바이트, 1부터) */
 const clangPosition = (code: string, pos: number) => {
-    const lineStart = code.lastIndexOf('\n', pos - 1) + 1;
-    const line = code.slice(0, lineStart).split('\n').length;
+    const { line, lineStart } = lineColOf(code, pos);
     const col = new TextEncoder().encode(code.slice(lineStart, pos)).length + 1;
     return { line, col };
 };

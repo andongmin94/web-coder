@@ -32,6 +32,7 @@ import {
     type Verdict,
 } from './tests-view.ts';
 import { storage, type CustomTest } from './storage.ts';
+import { chooseInitialLanguage, submitWarning } from './decisions.ts';
 import { setupSplit } from './split.ts';
 import { $, h } from './dom.ts';
 import type { LanguageIntel } from '../intel/types.ts';
@@ -100,9 +101,9 @@ let lastRun: {
     verdicts: Verdict[];
     compileError: boolean;
 } | null = null;
-/** 마지막 실행에 걸린 시간: 컴파일(C++, Java)과 예제 실행을 나눠 상태 줄에 보여 줍니다. */
 /** 지금 보이는 테스트 결과를 만든 언어와 코드 (하나만 실행할 때 옛 결과를 지울지 판단) */
 let resultsKey: string | null = null;
+/** 마지막 실행에 걸린 시간: 컴파일(C++, Java)과 예제 실행을 나눠 상태 줄에 보여 줍니다. */
 let lastTiming: { compileMs: number | null; firstLoad: boolean; runMs: number | null } | null =
     null;
 
@@ -176,13 +177,31 @@ const persist = (write: Promise<unknown>) => {
     );
 };
 
+/** 내 테스트는 칸에 입력할 때마다 저장하지 않고 모아서 저장합니다. (큰 입력이 여럿이면 매번 수 MB를 씀) */
+let testsSaveTimer = 0;
+const saveTestsNow = () => {
+    if (!testsSaveTimer) return;
+    clearTimeout(testsSaveTimer);
+    testsSaveTimer = 0;
+    if (problemId) persist(storage.setCustomTests(problemId, customTests));
+};
+const scheduleTestsSave = () => {
+    clearTimeout(testsSaveTimer);
+    testsSaveTimer = window.setTimeout(saveTestsNow, 400);
+};
+
 const saveCodeNow = () => {
     clearTimeout(saveTimer);
+    saveTestsNow();
     if (problemId && current) persist(storage.setCode(problemId, current.id, editor.value));
 };
+/** 코드를 고치면 저장하고, 상태 줄의 "고친 뒤 실행 안 함" 표시를 갱신합니다. */
 const scheduleSave = () => {
     clearTimeout(saveTimer);
-    saveTimer = window.setTimeout(saveCodeNow, 400);
+    saveTimer = window.setTimeout(() => {
+        saveCodeNow();
+        if (!stage) renderStatus();
+    }, 400);
 };
 
 const editor = new CodeEditor($('#editor'), {
@@ -250,7 +269,18 @@ const callbacks = {
     },
     onChangeCustom: (id: string, patch: { input?: string; expected?: string }) => {
         customTests = customTests.map((t) => (t.id === id ? { ...t, ...patch } : t));
-        if (problemId) persist(storage.setCustomTests(problemId, customTests));
+        // 입력이 바뀌면 그 결과는 더 이상 이 테스트의 결과가 아닙니다. (기대 출력만 바뀌면 다시 판정)
+        if (patch.input !== undefined && testStates.get(id)?.phase === 'done')
+            testStates.set(id, { phase: 'idle' });
+        scheduleTestsSave();
+        renderStatus();
+    },
+    onCommitCustom: (id: string) => {
+        // 같은 카드의 다른 칸으로 옮겨 갔으면 아직 고치는 중이니 다시 그리지 않습니다.
+        const card = testList.querySelector(`[data-id="${CSS.escape(id)}"]`);
+        if (card?.contains(document.activeElement)) return;
+        const test = allTests().find((t) => t.id === id);
+        if (test) renderOne(test);
     },
     onDuplicate: (test: TestCase) => {
         const id = newTestId();
@@ -327,9 +357,11 @@ const renderStatus = () => {
             parts.push(h('span', {}, `실행 중 ${stage.done ?? 0}/${stage.total ?? 0}`));
         }
         // 1초가 넘으면 경과 시간을 보여 줍니다. (시간 초과가 날 코드도 멈춘 게 아님을 알 수 있게)
-        const elapsed = performance.now() - stageStarted;
-        if (elapsed >= 1000)
-            parts.push(h('span', { class: 'status-sub' }, `${(elapsed / 1000).toFixed(1)}초`));
+        // 화면 낭독기가 0.2초마다 상태 줄 전체를 다시 읽지 않도록 경과 시간은 읽지 않는 칸에 두고
+        // 그 칸의 글자만 바꿉니다. (updateElapsed)
+        parts.push(
+            h('span', { class: 'status-sub status-elapsed', 'aria-hidden': 'true' }, elapsedText())
+        );
     } else if (compileMessage?.kind === 'error') {
         parts.push(h('span', { class: 'status-fail' }, '✕ 컴파일 에러'));
         const timing = timingText();
@@ -364,6 +396,15 @@ const renderStatus = () => {
                 );
             const timing = timingText();
             if (timing) parts.push(h('span', { class: 'status-sub' }, timing));
+            // 결과를 낸 뒤 코드를 고쳤으면, 이 결과가 지금 코드의 것이 아님을 알립니다.
+            if (current && resultsKey !== null && resultsKey !== `${current.id}\n${editor.value}`)
+                parts.push(
+                    h(
+                        'span',
+                        { class: 'status-sub status-stale' },
+                        '코드를 고친 뒤 아직 실행하지 않음'
+                    )
+                );
         }
     }
     statusBox.replaceChildren(...parts);
@@ -392,10 +433,19 @@ const judgeLimitMs = () =>
 let stageStarted = 0;
 let stageTicker = 0;
 
+const elapsedText = () => {
+    const elapsed = performance.now() - stageStarted;
+    return elapsed >= 1000 ? `${(elapsed / 1000).toFixed(1)}초` : '';
+};
+const updateElapsed = () => {
+    const span = statusBox.querySelector('.status-elapsed');
+    if (span) span.textContent = elapsedText();
+};
+
 const setStage = (next: Stage | null) => {
     if (next && !stage) {
         stageStarted = performance.now();
-        stageTicker = window.setInterval(renderStatus, 200);
+        stageTicker = window.setInterval(updateElapsed, 200);
     } else if (!next) {
         clearInterval(stageTicker);
     }
@@ -409,7 +459,11 @@ const setStage = (next: Stage | null) => {
 
 /** 테스트를 실행합니다. only를 주면 그 테스트만 (다른 테스트의 결과는 그대로 둠) */
 const runTests = async (only?: string) => {
-    if (stage || !current) return;
+    if (stage || switching || !current) return;
+    if (problem?.kind === 'function') {
+        showToast('함수만 구현하는 문제라 로컬에서 실행할 수 없습니다. (main 함수가 없음)');
+        return;
+    }
     const lang = current;
     const all = allTests();
     const tests = only ? all.filter((t) => t.id === only) : all;
@@ -529,12 +583,24 @@ const stopTests = () => {
 // ── 인텔리센스 ───────────────────────────────────────────────────
 // 언어별 엔진은 처음 고를 때 만들고 계속 재사용합니다.
 const intels = new Map<string, LanguageIntel>();
-let javaIndex: Promise<JavaIndex> | null = null;
-const loadJavaIndex = () => {
-    javaIndex ??= fetch('intel/java-index.json').then((r) => r.json() as Promise<JavaIndex>);
-    javaIndex.catch(() => (javaIndex = null));
-    return javaIndex;
+/** Java 버전별 자동완성 색인 (build.ts). release ''는 버전을 고르지 않는 Java(최신) */
+const javaIndexes = new Map<string, Promise<JavaIndex>>();
+const loadJavaIndex = (release: string) => {
+    let index = javaIndexes.get(release);
+    if (!index) {
+        index = fetch(`intel/java-index${release ? `-${release}` : ''}.json`).then((r) => {
+            if (!r.ok) throw new Error(`Java 색인을 불러오지 못했습니다 (${r.status})`);
+            return r.json() as Promise<JavaIndex>;
+        });
+        index.catch(() => javaIndexes.delete(release));
+        javaIndexes.set(release, index);
+    }
+    return index;
 };
+
+/** 고르지 않은 언어의 인텔리센스 엔진을 끄기까지의 시간 */
+const IDLE_INTEL_MS = 5 * 60_000;
+const idleIntelTimers = new Map<string, number>();
 
 const intelFor = (lang: ResolvedLanguage): LanguageIntel => {
     const key =
@@ -556,12 +622,27 @@ const intelFor = (lang: ResolvedLanguage): LanguageIntel => {
                 intel = createPythonIntel();
                 break;
             case 'java':
-                intel = createJavaIntel(loadJavaIndex, (code) =>
-                    pool.javaCheck(code, lang.javaRelease ?? '')
+                intel = createJavaIntel(
+                    () => loadJavaIndex(lang.javaRelease ?? ''),
+                    (code) => pool.javaCheck(code, lang.javaRelease ?? '')
                 );
                 break;
         }
         intels.set(key, intel);
+    }
+    // 다른 언어의 엔진(워커)은 한동안 다시 고르지 않으면 끕니다. (Pyright·TypeScript 워커는 수십 MB)
+    clearTimeout(idleIntelTimers.get(key));
+    idleIntelTimers.delete(key);
+    for (const [other, engine] of intels) {
+        if (other === key || !engine.dispose || idleIntelTimers.has(other)) continue;
+        idleIntelTimers.set(
+            other,
+            window.setTimeout(() => {
+                idleIntelTimers.delete(other);
+                intels.delete(other);
+                engine.dispose?.();
+            }, IDLE_INTEL_MS)
+        );
     }
     return intel;
 };
@@ -570,8 +651,11 @@ const intelFor = (lang: ResolvedLanguage): LanguageIntel => {
 /** 언어를 빠르게 연달아 바꿀 때 늦게 끝난 앞의 전환을 버리기 위한 번호 */
 let switchSeq = 0;
 
+/** 언어를 바꾸는 중(저장된 코드를 읽는 중)이면 실행하지 않습니다. (옛 언어로 돌아 결과가 섞임) */
+let switching = false;
 const switchLanguage = async (lang: ResolvedLanguage, initialCode?: string) => {
     const seq = ++switchSeq;
+    switching = true;
     if (current) saveCodeNow();
     languageSelect.value = lang.id;
 
@@ -581,6 +665,7 @@ const switchLanguage = async (lang: ResolvedLanguage, initialCode?: string) => {
     // current는 새 코드를 에디터에 올린 뒤에 바꿉니다. 그 전에 바꾸면 에디터에 남은 이전 언어의 코드가
     // 새 언어 이름으로 저장됩니다. (빠르게 두 번 바꿀 때 코드가 덮어써지던 문제)
     if (seq !== switchSeq) return;
+    switching = false;
     current = lang;
     editor.load(code, RUNTIMES[lang.runtime], intelFor(lang));
     void updateTemplateMenu();
@@ -605,19 +690,14 @@ const requestSubmit = () => {
         showToast('제출할 코드가 없습니다.', 'error');
         return;
     }
-    let warning: string | null = null;
-    const sameCode = lastRun && lastRun.source === source && lastRun.languageId === current.id;
-    if (problem?.kind === 'function') {
-        // 함수만 제출하는 문제는 로컬에서 컴파일·실행할 수 없으니 묻지 않습니다.
-    } else if (!sameCode) {
-        warning = '지금 코드로 아직 예제를 실행하지 않았습니다.';
-    } else if (lastRun!.compileError) {
-        warning = '컴파일 에러가 있는 코드입니다.';
-    } else {
-        const bad = lastRun!.verdicts.filter(isBadVerdict).length;
-        if (bad > 0)
-            warning = `예제 ${lastRun!.verdicts.length}개 중 ${bad}개를 통과하지 못했습니다.`;
-    }
+    const warning = submitWarning({
+        functionOnly: problem?.kind === 'function',
+        source,
+        languageId: current.id,
+        lastRun,
+        currentVerdicts: resultsKey === `${current.id}\n${source}` ? doneVerdicts() : null,
+        hasCustomTests: customTests.length > 0,
+    });
     if (!warning) {
         submit();
         return;
@@ -685,8 +765,10 @@ const init = async (data: {
     codeOpenSelect.replaceChildren(
         ...data.form.codeOpenOptions.map((o) => h('option', { value: o.value }, o.label))
     );
-    codeOpenValue = data.form.codeOpenValue ?? data.form.codeOpenOptions[0]?.value ?? null;
+    // BOJ 폼에서 고른 값이 없으면 아무것도 보내지 않아 BOJ의 기본값을 따릅니다. (첫 항목은 "공개"일 수 있음)
+    codeOpenValue = data.form.codeOpenValue ?? null;
     if (codeOpenValue) codeOpenSelect.value = codeOpenValue;
+    else codeOpenSelect.selectedIndex = -1;
     (codeOpenSelect.closest('.menu-row') as HTMLElement).hidden =
         data.form.codeOpenOptions.length === 0;
 
@@ -720,17 +802,14 @@ const init = async (data: {
     customTests = problemId ? await storage.getCustomTests(problemId) : [];
 
     const prefs = await storage.getPrefs();
-    const fromForm = languages.find((l) => l.id === data.form.selectedLanguageId);
-    // BOJ의 빈 에디터에는 폭 없는 공백(U+200B)이 들어 있을 수 있습니다.
-    const hasExistingSource = data.form.initialSource.replace(/[\s​﻿]/g, '').length > 0;
-    const preferred =
-        (hasExistingSource ? fromForm : undefined) ??
-        languages.find((l) => l.label === prefs.lastLanguageLabel) ??
-        languages.find((l) => l.label === 'C++17') ??
-        fromForm ??
-        languages[0];
-
-    await switchLanguage(preferred, hasExistingSource ? data.form.initialSource : undefined);
+    const choice = chooseInitialLanguage(languages, data.form, prefs.lastLanguageLabel);
+    await switchLanguage(choice.language, choice.initialCode);
+    if (choice.unsupportedSource) {
+        const label = data.form.languages.find((l) => l.id === data.form.selectedLanguageId)?.label;
+        showToast(
+            `이 제출의 언어${label ? `(${label})` : ''}는 웹 코더에서 실행할 수 없어 저장해 둔 코드를 열었습니다.`
+        );
+    }
     editor.focus();
 };
 
@@ -828,11 +907,16 @@ clearTemplateButton.addEventListener('click', async () => {
 });
 document.addEventListener('click', (e) => {
     const target = e.target as Node;
-    if (!settingsPanel.hidden && !settingsPanel.contains(target) && target !== settingsButton) {
+    // 단추 안의 ⚙ 글자(span)를 눌러도 단추를 누른 것 (contains)
+    if (
+        !settingsPanel.hidden &&
+        !settingsPanel.contains(target) &&
+        !settingsButton.contains(target)
+    ) {
         settingsPanel.hidden = true;
         settingsButton.setAttribute('aria-expanded', 'false');
     }
-    if (!confirmBox.hidden && !confirmBox.contains(target) && target !== submitButton)
+    if (!confirmBox.hidden && !confirmBox.contains(target) && !submitButton.contains(target))
         closeConfirm();
 });
 document.addEventListener('keydown', (e) => {
@@ -894,11 +978,16 @@ void storage.getPrefs().then((prefs) => {
 });
 renderStatus();
 
+let initialized = false;
 window.addEventListener('message', (event: MessageEvent) => {
     if (event.source !== window.parent || event.origin !== bojOrigin) return;
     const message = event.data as ParentToSolver;
-    if (message.type === 'init') void init(message);
-    else if (message.type === 'submit-result') onSubmitResult(message.ok, message.message);
+    // init은 한 번만 받습니다. (BOJ 페이지의 다른 스크립트가 보낸 두 번째 init으로 문제가 바뀌지 않게)
+    if (message.type === 'init') {
+        if (initialized) return;
+        initialized = true;
+        void init(message);
+    } else if (message.type === 'submit-result') onSubmitResult(message.ok, message.message);
     else if (message.type === 'problem' && message.problem.id === problemId)
         applyProblem(message.problem);
 });

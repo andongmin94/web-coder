@@ -205,32 +205,66 @@ export const parseClangSignatures = (output: string): IntelSignature[] => {
     return result.slice(0, 8);
 };
 
-/** `main.cpp:3:7: error: message` 형식의 진단 (note는 앞의 진단에 붙입니다) */
+/**
+ * `main.cpp:3:7: error: message` 형식의 진단 (note는 앞의 진단에 붙입니다).
+ *
+ * 헤더 안에서 난 에러(예: sort에 잘못된 비교 함수를 넘겨 <algorithm> 안에서 나는 에러)는 그 뒤에 오는
+ * `main.cpp:…: note: in instantiation of … requested here`가 가리키는 내 코드 위치에 표시합니다.
+ * 그런 note가 없으면 첫 줄에 표시합니다. (그냥 버리면 컴파일이 안 되는데 표시가 없음)
+ */
 export const parseClangDiagnostics = (
     output: string,
     code: string,
     file = 'main.cpp'
 ): IntelDiagnostic[] => {
     const result: IntelDiagnostic[] = [];
-    const re = new RegExp(
-        `^${file.replace('.', '\\.')}:(\\d+):(\\d+): (error|warning|note|fatal error): (.*)$`
-    );
+    const re = /^(.+?):(\d+):(\d+): (error|warning|note|fatal error): (.*)$/;
+    /** 아직 내 코드 위치를 못 찾은 헤더 진단 */
+    let pending: { severity: IntelDiagnostic['severity']; message: string } | null = null;
+    /** 마지막 진단이 내 코드의 것인지 (헤더 진단 뒤의 note를 엉뚱한 진단에 붙이지 않게) */
+    let lastIsMine = false;
+    const flushPending = () => {
+        if (!pending) return;
+        result.push({ from: 0, to: tokenEnd(code, 0), ...pending });
+        pending = null;
+    };
+    const at = (l: string, c: string) => {
+        const from = offsetOf(code, Number(l), Number(c), true);
+        return { from, to: tokenEnd(code, from) };
+    };
     for (const line of output.split('\n')) {
         const m = re.exec(line.trimEnd());
         if (!m) continue;
-        const [, l, c, level, message] = m;
+        const [, where, l, c, level, message] = m;
+        const mine = where === file;
         if (level === 'note') {
-            const last = result.at(-1);
-            if (last) last.message += `\n참고: ${message}`;
+            if (pending && mine) {
+                // 헤더 에러를 일으킨 내 코드 위치
+                result.push({
+                    ...at(l, c),
+                    ...pending,
+                    message: `${pending.message}\n참고: ${message}`,
+                });
+                pending = null;
+                lastIsMine = true;
+            } else if (pending) {
+                pending.message += `\n참고: ${message}`;
+            } else if (lastIsMine) {
+                result.at(-1)!.message += `\n참고: ${message}`;
+            }
             continue;
         }
-        const from = offsetOf(code, Number(l), Number(c), true);
-        result.push({
-            from,
-            to: tokenEnd(code, from),
-            severity: level === 'warning' ? 'warning' : 'error',
-            message,
-        });
+        flushPending();
+        const severity = level === 'warning' ? 'warning' : 'error';
+        if (mine) {
+            result.push({ ...at(l, c), severity, message });
+            lastIsMine = true;
+        } else {
+            const name = where.split('/').pop();
+            pending = { severity, message: `${message} (${name}:${l})` };
+            lastIsMine = false;
+        }
     }
+    flushPending();
     return result;
 };

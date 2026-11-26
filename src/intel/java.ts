@@ -3,7 +3,14 @@
 // - 자동완성/시그니처/호버: JDK 색인(SDK 클래스 시그니처) + 소스의 선언을 보고 타입을 추론
 //   예) Scanner sc → sc. → nextInt…, List<Integer> list → list.get(0). → Integer 멤버
 import type { JavaClass, JavaIndex, JavaMember } from './classfile.ts';
-import { enclosingClasses, parseUserClasses, type UserClass } from './java-source.ts';
+import {
+    blankLiterals,
+    enclosingClasses,
+    parseUserClasses,
+    splitTop,
+    TYPE,
+    type UserClass,
+} from './java-source.ts';
 import {
     wordStart,
     type IntelCompletion,
@@ -78,23 +85,6 @@ const PRIMITIVES = new Set([
 /** 패키지 접두어를 지운 짧은 표기: java.util.List<java.lang.Integer> → List<Integer> */
 export const shortType = (t: string) => t.replace(/\b(?:[a-z_]\w*\.)+(?=[A-Z])/g, '');
 
-/** 최상위 쉼표로 나누기 (괄호/꺾쇠 안은 무시) */
-const splitTop = (text: string, sep = ',') => {
-    const parts: string[] = [];
-    let depth = 0;
-    let cur = '';
-    for (const ch of text) {
-        if ('<([{'.includes(ch)) depth++;
-        else if ('>)]}'.includes(ch)) depth--;
-        if (ch === sep && depth === 0) {
-            parts.push(cur.trim());
-            cur = '';
-        } else cur += ch;
-    }
-    if (cur.trim()) parts.push(cur.trim());
-    return parts;
-};
-
 type TypeRef = { name: string; args: string[]; dims: number };
 
 export const parseTypeRef = (text: string): TypeRef => {
@@ -126,7 +116,7 @@ const substitute = (type: string, map: Record<string, string>) =>
 
 // ── 소스 분석 ────────────────────────────────────────────────────────
 
-const TYPE_RE = String.raw`(?:[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)(?:\s*<[^;(){}=]*?>)?(?:\s*\[\s*\])*`;
+const TYPE_RE = TYPE;
 /** 선언 앞에 붙는 수식어 (static int[] arr 처럼 필드에 흔함) */
 const MODIFIERS_RE = String.raw`(?:(?:public|private|protected|static|final|volatile|transient)\s+)*`;
 /** `int n, m;` `int a = 1, b;` 에서 첫 이름 뒤에 이어지는 이름들 */
@@ -141,8 +131,10 @@ const DECL_RE = new RegExp(
 export const declarations = (code: string, pos: number) => {
     const vars = new Map<string, string>();
     // 필드(클래스 본문)는 위치와 상관없이 보이므로 전체에서, 지역 변수는 pos 이전까지 봅니다.
+    // 주석·문자열 안의 글자는 선언으로 보지 않습니다. (위치가 같은 공백으로 바꾼 글에서 찾음)
     const scan = (text: string) => {
-        for (const m of text.matchAll(DECL_RE)) {
+        const blank = blankLiterals(text);
+        for (const m of blank.matchAll(DECL_RE)) {
             const [, type, name] = m;
             if (KEYWORDS.includes(type) && !PRIMITIVES.has(type) && type !== 'var') continue;
             if (/^(return|new|throw|else|case|import|package)$/.test(type)) continue;
@@ -156,7 +148,7 @@ export const declarations = (code: string, pos: number) => {
             }
             vars.set(name, resolved);
             // 같은 타입으로 이어서 선언한 이름들
-            const more = MORE_NAMES_RE.exec(text.slice(m.index! + m[0].length));
+            const more = MORE_NAMES_RE.exec(blank.slice(m.index! + m[0].length));
             if (more && type !== 'var') {
                 for (const part of more[1].split(',')) {
                     const other = /^\s*([A-Za-z_]\w*)((?:\s*\[\s*\])*)/.exec(part);
@@ -164,7 +156,7 @@ export const declarations = (code: string, pos: number) => {
                 }
             }
         }
-        for (const m of text.matchAll(
+        for (const m of blank.matchAll(
             new RegExp(String.raw`for\s*\(\s*(?:final\s+)?(${TYPE_RE})\s+([A-Za-z_]\w*)\s*:`, 'g')
         )) {
             vars.set(m[2], m[1]);
@@ -256,8 +248,32 @@ const resolveClass = (ctx: Ctx, name: string): string | null => {
     if (explicit && classes[explicit + tail]) return explicit + tail;
     for (const pkg of ctx.imports.packages) if (classes[`${pkg}.${name}`]) return `${pkg}.${name}`;
     // import를 아직 안 쓴 경우: 이름이 하나뿐이면 그것으로
-    const candidates = Object.keys(classes).filter((fqn) => fqn.endsWith(`.${name}`));
+    const candidates = bySimpleName(ctx.index).get(name) ?? [];
     return candidates.length === 1 ? candidates[0] : null;
+};
+
+/**
+ * 끝 이름 → 그 이름으로 끝나는 전체 이름들 ("List" → java.util.List, java.awt.List).
+ * resolveClass가 타입을 풀 때마다 전체 색인을 훑지 않도록 색인(코드가 바뀔 때마다 새로 만듦)마다 한 번 만듭니다.
+ */
+const simpleNames = new WeakMap<JavaIndex, Map<string, string[]>>();
+const bySimpleName = (index: JavaIndex) => {
+    let map = simpleNames.get(index);
+    if (!map) {
+        map = new Map();
+        for (const fqn of Object.keys(index.classes)) {
+            // a.b.Outer.Inner는 Inner와 Outer.Inner 둘 다로 찾을 수 있게
+            const parts = fqn.split('.');
+            for (let i = 1; i < parts.length; i++) {
+                const tail = parts.slice(i).join('.');
+                const list = map.get(tail);
+                if (list) list.push(fqn);
+                else map.set(tail, [fqn]);
+            }
+        }
+        simpleNames.set(index, map);
+    }
+    return map;
 };
 
 const BOXED: Record<string, string> = {
@@ -530,12 +546,13 @@ export const javaSignature = (
     code: string,
     pos: number
 ): IntelSignature[] | null => {
-    // 열린 '(' 찾기와 현재 인자 번호
+    // 열린 '(' 찾기와 현재 인자 번호 (문자열·주석 안의 쉼표와 괄호는 세지 않음)
+    const scanText = blankLiterals(code.slice(0, pos));
     let depth = 0;
     let comma = 0;
     let open = -1;
     for (let i = pos - 1; i >= 0; i--) {
-        const ch = code[i];
+        const ch = scanText[i];
         if (ch === ')' || ch === ']' || ch === '}') depth++;
         else if (ch === '(' || ch === '[' || ch === '{') {
             if (depth === 0) {

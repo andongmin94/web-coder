@@ -1,6 +1,8 @@
 // node.js 코드를 실행하는 워커 본문.
 // sandbox 페이지가 이 함수를 문자열로 만들어 blob 워커로 띄웁니다. 바깥 변수를 참조하면 안 됩니다.
-export function jsWorkerMain(prelude: string) {
+import type { OutputRules } from '../runner/output.ts';
+
+export function jsWorkerMain(prelude: string, rules: OutputRules) {
     type Global = typeof globalThis & {
         __stdin: string;
         __write: (fd: number, text: string) => void;
@@ -28,8 +30,8 @@ export function jsWorkerMain(prelude: string) {
 
     scope.onmessage = async (event: MessageEvent<{ source: string; stdin: string }>) => {
         const { source, stdin } = event.data;
-        // runner/output.ts의 OUTPUT_LIMIT과 같게 (이 함수는 바깥 값을 쓸 수 없음)
-        const LIMIT = 32 << 20;
+        // 출력 규칙은 runner/output.ts의 것을 sandbox.ts가 넘겨 줍니다. (이 함수는 바깥 값을 쓸 수 없음)
+        const LIMIT = rules.stdoutLimit;
         let stdout = '';
         let stderr = '';
         let truncated = false;
@@ -42,8 +44,9 @@ export function jsWorkerMain(prelude: string) {
         let lastFlush = 0;
         const progress = () => {
             const t = now();
-            // 작은 출력(64KB까지)은 바로바로, 그 뒤로는 모아서 (runner/output.ts와 같은 규칙)
-            if (stdout.length + stderr.length > 64 << 10 && t - lastFlush < 2) return;
+            // 작은 출력은 바로바로, 그 뒤로는 모아서 (runner/output.ts와 같은 규칙)
+            if (stdout.length + stderr.length > rules.eagerChars && t - lastFlush < rules.flushMs)
+                return;
             lastFlush = t;
             post({
                 type: 'output',
@@ -58,14 +61,10 @@ export function jsWorkerMain(prelude: string) {
         g.__stdin = stdin;
         g.__write = (fd, text) => {
             if (fd === 2) {
-                // 표준 에러는 채점하지 않으므로 출력 초과로 치지 않고 앞 1MB만 남깁니다. (output.ts와 같음)
-                const room = (1 << 20) - stderr.length;
+                // 표준 에러는 채점하지 않으므로 출력 초과로 치지 않고 앞부분만 남깁니다. (output.ts와 같음)
+                const room = rules.stderrLimit - stderr.length;
                 if (room >= 0) {
-                    stderr +=
-                        text.length > room
-                            ? text.slice(0, room) +
-                              '\n[표준 에러가 너무 길어 뒷부분은 생략했습니다]\n'
-                            : text;
+                    stderr += text.length > room ? text.slice(0, room) + rules.stderrCut : text;
                     progress();
                 }
                 return;

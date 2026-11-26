@@ -2,6 +2,7 @@
 import { fetchAsset } from '../shared/assets.ts';
 import { WASI_DEEP_STACK, instrumentDeepStack } from './deep-stack.ts';
 import { jspi } from './jspi.ts';
+import { notifyRestart } from './output.ts';
 import { loadBaseFS, loadModule, runWasi, textFile } from './wasi.ts';
 import type { ProcessOutput } from './types.ts';
 
@@ -25,6 +26,7 @@ let deepModule: Promise<WebAssembly.Module | null> | null = null;
 const loadDeepModule = () => {
     deepModule ??= (async () => {
         const response = await fetchAsset(new URL(`/${PYTHON}`, self.location.origin));
+        if (!response.ok) throw new Error(`Python을 불러오지 못했습니다 (${response.status})`);
         const patched = instrumentDeepStack(
             new Uint8Array(await response.arrayBuffer()),
             WASI_DEEP_STACK
@@ -62,7 +64,8 @@ export const runPython = async (
         return plain;
     }
     deepSource = source;
-    // 실패한 첫 시도와 인터프리터를 고치는 시간은 실행 시간에서 뺍니다.
+    // 실패한 첫 시도와 인터프리터를 고치는 시간은 실행 시간과 시간 제한에서 뺍니다.
+    if (output) notifyRestart();
     const started = performance.now();
     const {
         fs: _deepFs,

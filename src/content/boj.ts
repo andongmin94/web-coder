@@ -142,16 +142,20 @@ let removeListener: (() => void) | null = null;
  */
 // BOJ가 붐빌 때는 제출이 접수돼도 넘어가는 데 오래 걸리므로 넉넉히 기다리고, 다시 누르기 전에 확인하게 합니다.
 const SUBMIT_NAVIGATION_WAIT_MS = 15000;
+/** 화면을 닫거나 다시 열면 지웁니다. (남은 타이머가 새로 연 웹 코더를 닫지 않게) */
+let submitWatchTimer = 0;
 const watchSubmitNavigation = () => {
-    const timer = window.setTimeout(() => {
+    clearTimeout(submitWatchTimer);
+    const timer = (submitWatchTimer = window.setTimeout(() => {
         showNativeForm(
             '제출 화면이 넘어가지 않았습니다. 코드를 원래 제출 폼에 옮겨 두었습니다. 이미 접수됐을 수 있으니 채점 현황을 먼저 확인하고, 보안 확인이 떴다면 완료한 뒤 제출 버튼을 다시 눌러 주세요.'
         );
-    }, SUBMIT_NAVIGATION_WAIT_MS);
+    }, SUBMIT_NAVIGATION_WAIT_MS));
     window.addEventListener('pagehide', () => clearTimeout(timer), { once: true });
 };
 
 const showNativeForm = (notice?: string) => {
+    clearTimeout(submitWatchTimer);
     removeListener?.();
     removeListener = null;
     document.getElementById(ROOT_ID)?.remove();
@@ -191,6 +195,7 @@ const mount = async () => {
     if (!form || !problemId) return;
 
     injectStyle();
+    clearTimeout(submitWatchTimer);
     document.querySelector('.webcoder-open')?.remove();
     document.querySelector('.webcoder-notice')?.remove();
     document.getElementById(ROOT_ID)?.remove();

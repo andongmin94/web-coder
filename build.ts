@@ -30,6 +30,8 @@ const GZIP_ASSETS = [
 
 const manifest = {
     manifest_version: 3,
+    // WasmGC(Java 실행)와 esbuild 대상(chrome120). 더 낮으면 설치는 되지만 실행 중에 실패합니다.
+    minimum_chrome_version: '120',
     name: '웹 코더',
     description: '백준 제출 페이지에서 바로 실행하고 제출하는 로컬 코드 에디터',
     version: pkg.version,
@@ -195,12 +197,27 @@ const buildTypeshed = async () => {
     await writeFile(`${outdir}/intel/typeshed-stdlib.json`, JSON.stringify(files));
 };
 
-/** Java 자동완성 색인: javac SDK(public/java/compile-classlib.bin)의 클래스 시그니처 */
+/**
+ * Java 자동완성 색인: javac SDK의 클래스 시그니처. 컴파일 검사(pool.ts)와 같은 SDK를 쓰도록
+ * 버전마다 따로 만듭니다. (Java 8을 골랐는데 String.repeat 같은 11+ API를 제안하지 않게)
+ * java-index.json은 버전을 고르지 않는 Java(최신), java-index-8.json 등은 그 버전.
+ */
 const buildJavaIndexFile = async () => {
     const { readArchive } = await import('./tools/java/classlib-archive.mjs');
     const { buildJavaIndex } = await import('./src/intel/classfile.ts');
-    const { entries } = readArchive(await readFile('public/java/compile-classlib.bin'));
-    await writeFile(`${outdir}/intel/java-index.json`, JSON.stringify(buildJavaIndex(entries)));
+    const { JAVA_RELEASES } = await import('./src/shared/languages.ts');
+    await Promise.all(
+        ['', ...JAVA_RELEASES].map(async (release) => {
+            const suffix = release ? `-${release}` : '';
+            const { entries } = readArchive(
+                await readFile(`public/java/compile-classlib${suffix}.bin`)
+            );
+            await writeFile(
+                `${outdir}/intel/java-index${suffix}.json`,
+                JSON.stringify(buildJavaIndex(entries))
+            );
+        })
+    );
 };
 
 const gzipAssets = () =>
@@ -219,6 +236,9 @@ const gzipAssets = () =>
 const copyStatic = async () => {
     await mkdir(`${outdir}/wasm`, { recursive: true });
     await cp('public', outdir, { recursive: true });
+    // 원본 아이콘(크기별 아이콘을 만드는 데 씀)과 README용 로고는 확장에 필요 없습니다.
+    await rm(`${outdir}/asset/icon.png`);
+    await rm(`${outdir}/logo.svg`);
     await cp('src/solver/solver.html', `${outdir}/solver.html`);
     await cp('src/sandbox/sandbox.html', `${outdir}/sandbox.html`);
     await mkdir(`${outdir}/clang`, { recursive: true });

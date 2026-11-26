@@ -182,6 +182,16 @@ declare const console: {
     assert(condition: unknown, ...data: unknown[]): void;
 };
 declare const performance: { now(): number };
+// 실행기(node-prelude)가 제공하는 전역. 없으면 실제로 도는 코드에 에러 표시가 뜹니다.
+declare class TextDecoder {
+    constructor(label?: string, options?: { fatal?: boolean; ignoreBOM?: boolean });
+    readonly encoding: string;
+    decode(input?: ArrayBufferView | ArrayBuffer, options?: { stream?: boolean }): string;
+}
+declare class TextEncoder {
+    readonly encoding: string;
+    encode(input?: string): Uint8Array;
+}
 declare const global: typeof globalThis;
 declare const __dirname: string;
 declare const __filename: string;
@@ -314,10 +324,9 @@ const handle = (req: Request): unknown => {
                         !(result.isMemberCompletion && isNonMember(e))
                 )
                 .slice(0, 400)
-                .map((e) => ({
+                .map((e): { label: string; kind: string; boost: number; detail?: string } => ({
                     label: e.name,
                     kind: KIND[e.kind] ?? 'variable',
-                    detail: e.kindModifiers?.includes('deprecated') ? '(deprecated)' : undefined,
                     boost: e.sortText < '11' ? 2 : 0,
                 }));
             // 상위 몇 개는 시그니처를 붙여 줍니다.

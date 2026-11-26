@@ -81,6 +81,8 @@ const VERDICT_TEXT: Record<Verdict, string> = {
 type Callbacks = {
     onToggle: (id: string) => void;
     onChangeCustom: (id: string, patch: { input?: string; expected?: string }) => void;
+    /** 내 테스트의 입력·기대 출력 칸에서 고치기를 마쳤을 때 (포커스가 칸을 떠남) */
+    onCommitCustom: (id: string) => void;
     /** 파일로 불러오기처럼 값을 통째로 바꿀 때 (카드를 다시 그림) */
     onReplaceCustom: (id: string, patch: { input?: string; expected?: string }) => void;
     onDeleteCustom: (id: string) => void;
@@ -233,7 +235,8 @@ const editable = (
     value: string,
     placeholder: string,
     onInput: (v: string) => void,
-    onReplace: (v: string) => void
+    onReplace: (v: string) => void,
+    onCommit: () => void = () => {}
 ) => {
     const fileLink = h(
         'button',
@@ -268,6 +271,8 @@ const editable = (
     area.addEventListener('input', () =>
         area.value.length > BIG_TEXT ? onReplace(area.value) : onInput(area.value)
     );
+    // 고친 뒤 칸을 떠나면 판정을 새 값으로 다시 그립니다. (입력 중에는 포커스를 지키려고 그대로 둠)
+    area.addEventListener('change', onCommit);
     return h('div', { class: 'io' }, [head, area]);
 };
 
@@ -363,14 +368,16 @@ export const renderTest = (
                 test.input,
                 '입력값',
                 (v) => callbacks.onChangeCustom(test.id, { input: v }),
-                (v) => callbacks.onReplaceCustom(test.id, { input: v })
+                (v) => callbacks.onReplaceCustom(test.id, { input: v }),
+                () => callbacks.onCommitCustom(test.id)
             ),
             editable(
                 '기대 출력',
                 test.expected,
                 '비우면 비교하지 않고 출력만 봅니다',
                 (v) => callbacks.onChangeCustom(test.id, { expected: v }),
-                (v) => callbacks.onReplaceCustom(test.id, { expected: v })
+                (v) => callbacks.onReplaceCustom(test.id, { expected: v }),
+                () => callbacks.onCommitCustom(test.id)
             )
         );
     } else {

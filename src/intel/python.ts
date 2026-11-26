@@ -10,6 +10,7 @@ import {
     type IntelSignature,
     type LanguageIntel,
 } from './types.ts';
+import { createRequests } from './rpc.ts';
 
 const URI = 'file:///workspace/main.py';
 
@@ -44,8 +45,11 @@ export const createPythonIntel = (): LanguageIntel => {
     const worker = new Worker('intel/pyright.worker.js');
     worker.postMessage({ type: 'browser/boot', mode: 'foreground' });
 
-    let nextId = 1;
-    const pending = new Map<number, (r: unknown) => void>();
+    const requests = createRequests();
+    worker.onerror = (e) => {
+        e.preventDefault();
+        requests.fail();
+    };
     let docVersion = 0;
     let docText = '';
     let opened = false;
@@ -58,26 +62,14 @@ export const createPythonIntel = (): LanguageIntel => {
     const send = (message: Record<string, unknown>) =>
         worker.postMessage({ jsonrpc: '2.0', ...message });
     const request = <T>(method: string, params: unknown, timeoutMs = 20_000) =>
-        new Promise<T | null>((resolve) => {
-            const id = nextId++;
-            const timer = setTimeout(() => {
-                pending.delete(id);
-                resolve(null);
-            }, timeoutMs);
-            pending.set(id, (r) => {
-                clearTimeout(timer);
-                resolve(r as T);
-            });
-            send({ id, method, params });
-        });
+        requests.request<T>((id) => send({ id, method, params }), timeoutMs);
     const notify = (method: string, params: unknown) => send({ method, params });
 
     worker.onmessage = (event: MessageEvent<Record<string, any>>) => {
         const msg = event.data;
         if (!msg || msg.jsonrpc !== '2.0') return;
         if ('id' in msg && !('method' in msg)) {
-            pending.get(msg.id)?.(msg.result ?? null);
-            pending.delete(msg.id);
+            requests.resolve(msg.id, msg.result ?? null);
             return;
         }
         // 서버 → 클라이언트 요청에는 답해 줘야 서버가 멈추지 않습니다.
@@ -109,11 +101,10 @@ export const createPythonIntel = (): LanguageIntel => {
         }
     };
 
-    const initialized = (async () => {
-        const files = (await (await fetch('intel/typeshed-stdlib.json')).json()) as Record<
-            string,
-            string
-        >;
+    const initialize = async () => {
+        const response = await fetch('intel/typeshed-stdlib.json');
+        if (!response.ok) throw new Error(`typeshed (${response.status})`);
+        const files = (await response.json()) as Record<string, string>;
         await request(
             'initialize',
             {
@@ -153,11 +144,20 @@ export const createPythonIntel = (): LanguageIntel => {
             60_000
         );
         notify('initialized', {});
-    })();
+    };
+    /** 초기화가 실패하면(파일을 못 받음 등) 기억하지 않고 다음 요청 때 다시 시도합니다. */
+    let initialized: Promise<void> | null = null;
+    const ready = () => {
+        initialized ??= initialize();
+        initialized.catch(() => (initialized = null));
+        return initialized;
+    };
 
-    /** 문서 내용을 서버와 맞춥니다. */
-    const sync = async (code: string) => {
-        await initialized;
+    /**
+     * 문서 내용을 서버와 맞춥니다. 맞추기와 그 뒤의 요청은 같은 틈에 보내야 합니다. 사이에 await가 끼면
+     * 다른 요청이 문서를 바꿔(입력 중 자동완성·진단이 겹침) 이 요청의 위치가 다른 내용에 대해 해석됩니다.
+     */
+    const sync = (code: string) => {
         if (!opened) {
             opened = true;
             docText = code;
@@ -188,7 +188,8 @@ export const createPythonIntel = (): LanguageIntel => {
             const from = wordStart(code, pos);
             const member = code.slice(0, from).trimEnd().endsWith('.');
             if (!explicit && !member && pos - from < 1) return null;
-            await sync(code);
+            await ready();
+            sync(code);
             const result = await request<{ items?: any[] } | any[]>('textDocument/completion', {
                 textDocument: { uri: URI },
                 position: toPosition(code, pos),
@@ -210,7 +211,8 @@ export const createPythonIntel = (): LanguageIntel => {
             return { from, items };
         },
         async diagnose(code) {
-            await sync(code);
+            await ready();
+            sync(code);
             const want = docVersion;
             // 지금 문서 버전의 진단이 올 때까지 기다립니다. 그 사이에 이전 버전의 진단이 먼저 도착할 수
             // 있어서(입력 중에 자동완성이 문서를 계속 갱신함) 한 번 깨어났다고 끝내면 안 됩니다.
@@ -237,7 +239,8 @@ export const createPythonIntel = (): LanguageIntel => {
             }));
         },
         async hover(code, pos) {
-            await sync(code);
+            await ready();
+            sync(code);
             const result = await request<{ contents?: unknown }>('textDocument/hover', {
                 textDocument: { uri: URI },
                 position: toPosition(code, pos),
@@ -245,7 +248,8 @@ export const createPythonIntel = (): LanguageIntel => {
             return markup(result?.contents) || null;
         },
         async signature(code, pos) {
-            await sync(code);
+            await ready();
+            sync(code);
             const help = await request<{
                 signatures?: any[];
                 activeSignature?: number;

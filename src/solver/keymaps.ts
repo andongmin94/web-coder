@@ -55,26 +55,6 @@ export const KEYMAPS: { id: KeymapName; label: string }[] = [
 export const isKeymapName = (value: unknown): value is KeymapName =>
     KEYMAPS.some((k) => k.id === value);
 
-/**
- * 파일 전체를 언어 규칙대로 다시 들여씁니다. 커서와 선택은 그대로 둡니다.
- * (Visual Studio의 Ctrl+K, Ctrl+D 문서 서식, IntelliJ의 Ctrl+Alt+L 대신. 들여쓰기만 맞춤)
- */
-export const reindentAll: StateCommand = ({ state, dispatch }) => {
-    const all = state.update({ selection: { anchor: 0, head: state.doc.length } }).state;
-    indentSelection({
-        state: all,
-        dispatch: (tr) =>
-            dispatch(
-                state.update({
-                    changes: tr.changes,
-                    selection: state.selection.map(tr.changes),
-                    userEvent: 'input.indent',
-                })
-            ),
-    });
-    return true;
-};
-
 /** Visual Studio의 Ctrl+L: 커서가 있는 줄을 잘라 클립보드에 넣습니다. */
 const cutLine: Command = (view) => {
     const { state } = view;

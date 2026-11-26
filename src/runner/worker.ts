@@ -1,7 +1,7 @@
 // 실행 워커 (C++ 결과물, Python, node.js 깊은 재귀 모드). Java·JS는 eval이 필요해 sandbox 페이지에서 실행합니다. 시간 초과 시 메인 쪽 RunnerPool이 terminate 합니다.
 import { prepareCpp } from './cpp.ts';
 import { runNodeDeep, warmUpNodeDeep } from './node-deep.ts';
-import { setProgressSink } from './output.ts';
+import { setProgressSink, setRestartSink } from './output.ts';
 import { runPython, warmUpPython } from './python.ts';
 import type { ProcessOutput, RunRequest, WorkerRequest, WorkerResponse } from './types.ts';
 
@@ -48,9 +48,15 @@ self.addEventListener('message', async (event: MessageEvent<WorkerRequest>) => {
         setProgressSink((stdout, stderr, reset) =>
             reply({ type: 'output', id: req.id, stdout, stderr, reset })
         );
+        // 깊은 재귀 모드로 다시 실행: 출력은 처음부터, 시간 제한도 다시 (pool.ts가 'started'로 타이머를 새로 잼)
+        setRestartSink(() => {
+            reply({ type: 'output', id: req.id, stdout: '', stderr: '', reset: true });
+            reply({ type: 'started', id: req.id });
+        });
         const started = performance.now();
         const { elapsedMs, ...output } = await execute();
         setProgressSink(null);
+        setRestartSink(null);
         reply({
             type: 'run',
             id: req.id,
@@ -59,6 +65,7 @@ self.addEventListener('message', async (event: MessageEvent<WorkerRequest>) => {
         });
     } catch (error) {
         setProgressSink(null);
+        setRestartSink(null);
         reply({ type: 'error', id: req.id, message: describeError(error) });
     }
 });

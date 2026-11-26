@@ -6,28 +6,20 @@ import {
     type IntelSignature,
     type LanguageIntel,
 } from './types.ts';
+import { createRequests } from './rpc.ts';
 
 export const createJavaScriptIntel = (): LanguageIntel => {
     const worker = new Worker('intel/ts-worker.js');
-    let nextId = 1;
-    const pending = new Map<number, (r: unknown) => void>();
-    worker.onmessage = (e: MessageEvent<{ id: number; result: unknown }>) => {
-        pending.get(e.data.id)?.(e.data.result);
-        pending.delete(e.data.id);
+    const requests = createRequests();
+    worker.onmessage = (e: MessageEvent<{ id: number; result: unknown }>) =>
+        requests.resolve(e.data.id, e.data.result);
+    // 워커를 못 띄우거나 죽으면 요청마다 시간 제한까지 기다리지 않게
+    worker.onerror = (e) => {
+        e.preventDefault();
+        requests.fail();
     };
     const ask = <T>(message: Record<string, unknown>, timeoutMs = 15_000) =>
-        new Promise<T | null>((resolve) => {
-            const id = nextId++;
-            const timer = setTimeout(() => {
-                pending.delete(id);
-                resolve(null);
-            }, timeoutMs);
-            pending.set(id, (r) => {
-                clearTimeout(timer);
-                resolve(r as T);
-            });
-            worker.postMessage({ ...message, id });
-        });
+        requests.request<T>((id) => worker.postMessage({ ...message, id }), timeoutMs);
 
     return {
         triggerCharacters: ['.'],

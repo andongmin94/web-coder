@@ -52,6 +52,30 @@ test('진단: 바이트 열을 offset으로, note는 붙이기', () => {
     assert.match(d[1].message, /참고: here/);
 });
 
+test('진단: 헤더 안의 에러는 그것을 부른 내 코드 위치에, note는 그 에러에', () => {
+    const code = 'int main(){\n  int w;\n  std::sort(a, a + 3, bad);\n}';
+    const out = [
+        "main.cpp:2:7: warning: unused variable 'w'",
+        '/include/c++/v1/__algorithm/sort.h:100:10: error: no matching function for call to object',
+        '/include/c++/v1/__algorithm/sort.h:90:5: note: candidate function not viable',
+        "main.cpp:3:8: note: in instantiation of function template specialization 'std::sort' requested here",
+    ].join('\n');
+    const d = parseClangDiagnostics(out, code);
+    assert.equal(d.length, 2);
+    assert.equal(d[0].severity, 'warning');
+    assert.doesNotMatch(d[0].message, /참고/); // 경고에 엉뚱한 note가 붙지 않음
+    assert.equal(d[1].severity, 'error');
+    assert.equal(code.slice(d[1].from, d[1].to), 'sort');
+    assert.match(d[1].message, /no matching function for call to object \(sort\.h:100\)/);
+    assert.match(d[1].message, /candidate function not viable/);
+    assert.match(d[1].message, /requested here/);
+});
+
+test('진단: 내 코드 위치가 없는 헤더 에러는 첫 줄에', () => {
+    const d = parseClangDiagnostics('/x/y.h:1:1: error: boom', 'int main(){}');
+    assert.deepEqual([d.length, d[0].from, d[0].severity], [1, 0, 'error']);
+});
+
 test('offsetOf: 줄/열', () => {
     assert.equal(offsetOf('ab\ncd', 2, 2), 4);
 });

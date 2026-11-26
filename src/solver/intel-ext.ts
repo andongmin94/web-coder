@@ -19,6 +19,7 @@ import {
     type ViewUpdate,
 } from '@codemirror/view';
 import type { IntelCompletion, IntelSignature, LanguageIntel } from '../intel/types.ts';
+import { blankLiterals } from '../intel/java-source.ts';
 import { h } from './dom.ts';
 
 const toCompletion = (item: IntelCompletion): Completion => {
@@ -124,15 +125,19 @@ const renderSignatures = (sigs: IntelSignature[]) => {
     return dom;
 };
 
-/** 이 위치를 감싸는 호출의 '(' 위치. 없으면 -1 */
+/** 이 위치를 감싸는 호출의 '(' 위치. 없으면 -1 (문자열·주석 안의 괄호는 세지 않음) */
 const callOpenParen = (code: string, pos: number) => {
+    const start = Math.max(0, pos - 2000);
+    const text = blankLiterals(code.slice(start, pos));
     let depth = 0;
-    for (let i = pos - 1; i >= 0 && pos - i < 2000; i--) {
-        const ch = code[i];
+    for (let i = text.length - 1; i >= 0; i--) {
+        const ch = text[i];
         if (ch === ')' || ch === ']') depth++;
         else if (ch === '(' || ch === '[') {
             if (depth === 0)
-                return ch === '(' && /[\w$>]\s*$/.test(code.slice(Math.max(0, i - 40), i)) ? i : -1;
+                return ch === '(' && /[\w$>]\s*$/.test(text.slice(Math.max(0, i - 40), i))
+                    ? start + i
+                    : -1;
             depth--;
         } else if ((ch === ';' || ch === '{' || ch === '}') && depth === 0) return -1;
     }

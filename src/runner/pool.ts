@@ -22,6 +22,7 @@ import type {
     RunResult,
     WorkerResponse,
 } from './types.ts';
+import { createWatchdog } from './watchdog.ts';
 
 const RUNNER_URL = 'runner-worker.js';
 const CPP_COMPILER_URL = 'clang/compiler-worker.js';
@@ -113,20 +114,17 @@ class RunnerWorker {
         const id = this.nextId++;
         return new Promise<Final<WorkerResponse> | TimedOut | null>((resolve) => {
             const partial: Partial = { stdout: '', stderr: '' };
-            const expire = () => {
+            const watchdog = createWatchdog(loadTimeoutMs, runTimeoutMs, () => {
                 this.pending.delete(id);
                 resolve({ type: 'timeout', partial });
-            };
-            let timer = setTimeout(expire, loadTimeoutMs);
+            });
             this.pending.set(id, {
                 resolve: (r) => {
-                    clearTimeout(timer);
+                    watchdog.stop();
                     resolve(r);
                 },
-                onStarted: () => {
-                    clearTimeout(timer);
-                    timer = setTimeout(expire, runTimeoutMs);
-                },
+                // 깊은 재귀 모드로 다시 실행할 때도 옵니다. (그때부터 다시 잼)
+                onStarted: () => watchdog.started(),
                 partial,
             });
             this.worker.postMessage({ ...message, id });
@@ -160,8 +158,12 @@ class CompilerWorker {
             for (const [id, resolve] of this.pending)
                 resolve({ type: 'error', id, message: e.message || '컴파일러 워커 오류' });
             this.pending.clear();
+            this.crashed = true;
         });
     }
+
+    /** 워커 오류가 난 적이 있는지. 그런 워커는 버리고 새로 만듭니다. (다음 컴파일이 시간 제한까지 멈추지 않게) */
+    crashed = false;
 
     send(message: CompilerRequest) {
         this.worker.postMessage(message);
@@ -428,6 +430,10 @@ export class RunnerPool {
     }
 
     private getCompiler() {
+        if (this.compiler?.crashed) {
+            this.compiler.terminate();
+            this.compiler = null;
+        }
         if (!this.compiler) {
             this.compiler = RunnerPool.createCppCompiler();
             this.compiler.send({ type: 'warmup' });
@@ -596,11 +602,15 @@ export class RunnerPool {
         }
         if (lang.runtime === 'javascript') {
             // 깊은 재귀로 V8 스택이 넘친 코드는 QuickJS 깊은 재귀 모드로 다시 실행합니다. (node-deep.ts)
-            // 한 번 넘친 소스의 다음 테스트는 넘칠 첫 시도를 건너뜁니다.
-            if (!jspi() || this.deepJsSource !== payload.source) {
+            // 같은 코드와 같은 입력으로 다시 돌릴 때만 넘칠 첫 시도를 건너뜁니다. QuickJS는 수십 배 느려서,
+            // 소스만 보고 건너뛰면 V8에서는 통과하던 다른 큰 입력까지 시간 초과가 날 수 있습니다.
+            const key = `${payload.source}\u0000${stdin}`;
+            if (!jspi() || !this.deepJsRuns.has(key)) {
                 const first = await this.sandbox.run(lang.runtime, payload, stdin, timeoutMs);
                 if (!jspi() || !isJsStackOverflow(first)) return first;
-                this.deepJsSource = payload.source;
+                this.deepJsRuns.add(key);
+                while (this.deepJsRuns.size > 64)
+                    this.deepJsRuns.delete(this.deepJsRuns.values().next().value!);
             }
             const deep = await this.runInWorker('javascript', payload, stdin, timeoutMs);
             if (deep.status === 'cancelled') return deep;
@@ -610,8 +620,8 @@ export class RunnerPool {
         return this.runInWorker(lang.runtime, payload, stdin, timeoutMs);
     }
 
-    /** node.js 깊은 재귀 모드가 필요했던 소스 */
-    private deepJsSource: string | null = null;
+    /** node.js 깊은 재귀 모드가 필요했던 (소스, 입력) */
+    private readonly deepJsRuns = new Set<string>();
 
     private async runInWorker(
         runtime: RunRequest['runtime'],
