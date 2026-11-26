@@ -206,6 +206,8 @@ const fromPalette = (p: Palette, dark: boolean): Extension => [
             },
             '.cm-selectionMatch': { backgroundColor: alpha(p.selection, '99') },
             '.cm-searchMatch': { backgroundColor: alpha(p.constant, '55') },
+            // 찾기 상자 등 에디터 위 창 (테마 배경이 없으면 글자가 비쳐 보임)
+            '.cm-panels': { backgroundColor: p.gutterBg ?? p.bg, color: p.fg },
         },
         { dark }
     ),

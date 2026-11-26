@@ -1344,67 +1344,59 @@ li[aria-selected] .cm-completionDetail {
     font-size: 12px;
 }
 
-/* ── 찾기 상자 (search-box.ts): VS Code처럼 에디터 오른쪽 위에 떠 있음 ── */
-/* 코드 위에 겹쳐 띄움 (CodeMirror 기본은 코드를 아래로 밀어내는 막대) */
+/* ── 찾기 상자 (search-box.ts): VS Code처럼 에디터 오른쪽 위에 떠 있음 ──
+   배경은 테마의 .cm-panels 색 (themes.ts, 기본 테마는 CodeMirror 기본 회색) */
 .cm-editor .cm-panels.cm-panels-top {
     position: absolute;
-    top: 0;
+    top: 2px;
     left: auto;
     right: 18px;
-    width: max-content;
     max-width: calc(100% - 36px);
-    border: 0 !important;
-    background: none !important;
+    border: 1px solid color-mix(in srgb, currentColor 18%, transparent) !important;
+    border-radius: 6px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
 }
 
 .cm-editor .cm-panel.sb-box {
     display: flex;
     align-items: flex-start;
     gap: 2px;
-    margin-top: 2px;
     padding: 4px 6px 4px 2px;
-    border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
-    border-radius: 6px;
-    background-color: inherit;
-    background-image: linear-gradient(
-        color-mix(in srgb, currentColor 5%, transparent),
-        color-mix(in srgb, currentColor 5%, transparent)
-    );
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
     font: 13px var(--ui);
-}
-
-/* 에디터 배경색을 물려받도록 (CodeMirror 기본은 회색 막대) */
-.cm-editor .cm-panels-top,
-.cm-editor .cm-panels-top .cm-panel.sb-box {
-    color: inherit;
-}
-
-.cm-editor .cm-panels {
-    background-color: inherit;
 }
 
 .sb-box .sb-rows {
     display: flex;
+    flex: 1;
     flex-direction: column;
     gap: 4px;
+    min-width: 0;
 }
 
 .sb-box .sb-row {
     display: flex;
     align-items: center;
     gap: 2px;
+    min-width: 0;
+}
+
+.sb-box .sb-row > * {
+    flex-shrink: 0;
 }
 
 .sb-box .sb-row[hidden] {
     display: none;
 }
 
+.sb-box .sb-row > .sb-field {
+    /* 에디터가 좁으면 찾기 칸부터 줄어듦 */
+    flex: 0 1 250px;
+    min-width: 110px;
+}
+
 .sb-box .sb-field {
     display: flex;
     align-items: center;
-    width: 250px;
-    max-width: 40vw;
     padding-right: 2px;
     border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
     border-radius: 4px;
@@ -1479,7 +1471,7 @@ li[aria-selected] .cm-completionDetail {
 }
 
 .sb-box .sb-count {
-    min-width: 64px;
+    min-width: 44px;
     padding: 0 6px;
     font-size: 12px;
     white-space: nowrap;
