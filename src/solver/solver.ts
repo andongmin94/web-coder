@@ -190,10 +190,23 @@ const scheduleTestsSave = () => {
     testsSaveTimer = window.setTimeout(saveTestsNow, 400);
 };
 
+/**
+ * 저장소에 있는 지금 언어의 코드 (이 탭이 읽거나 쓴 마지막 값). 에디터 내용이 이것과 같으면 저장하지 않습니다.
+ * 같은 문제를 탭 두 개로 열었을 때, 고치지 않은 옛 탭이 실행·언어 바꾸기·탭 닫기 때 옛 코드를 저장해
+ * 다른 탭에서 고친 코드를 덮어쓰던 것을 막습니다. (다른 탭의 저장은 아래 onChanged에서 받아 옴)
+ */
+let savedCode: string | undefined;
+/** 언어를 고를 때 에디터에 올린 코드 (저장된 적 없는 템플릿이면 savedCode는 없음) */
+let loadedCode: string | undefined;
+
 const saveCodeNow = () => {
     clearTimeout(saveTimer);
     saveTestsNow();
-    if (problemId && current) persist(storage.setCode(problemId, current.id, editor.value));
+    if (!problemId || !current) return;
+    const code = editor.value;
+    if (code === savedCode) return;
+    savedCode = code;
+    persist(storage.setCode(problemId, current.id, code));
 };
 /** 코드를 고치면 저장하고, 상태 줄의 "고친 뒤 실행 안 함" 표시를 갱신합니다. */
 const scheduleSave = () => {
@@ -667,6 +680,8 @@ const switchLanguage = async (lang: ResolvedLanguage, initialCode?: string) => {
     if (seq !== switchSeq) return;
     switching = false;
     current = lang;
+    savedCode = saved;
+    loadedCode = code;
     editor.load(code, RUNTIMES[lang.runtime], intelFor(lang));
     void updateTemplateMenu();
     pool.warmUp(lang);
@@ -956,6 +971,49 @@ addTestButton.addEventListener('click', () => {
     testList.querySelector<HTMLTextAreaElement>(`[data-id="${id}"] textarea`)?.focus();
 });
 window.addEventListener('beforeunload', saveCodeNow);
+
+// ── 다른 탭에서 같은 문제를 고쳤을 때 ──────────────────────────────
+// 이 탭에서 고치지 않았으면 그 코드로 맞추고(되돌리기 가능), 양쪽에서 고쳤으면 알립니다.
+let conflictShown = false;
+chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !problemId) return;
+    const codeChange = current ? changes[`code:${problemId}:${current.id}`] : undefined;
+    if (codeChange && typeof codeChange.newValue === 'string') {
+        const incoming = codeChange.newValue;
+        if (incoming !== savedCode) {
+            // 이 탭에서 고친 적이 있는지: 저장된 값이나 처음 올린 코드(템플릿)와 다르면 고친 것
+            const editedHere = editor.value !== savedCode && editor.value !== loadedCode;
+            savedCode = incoming;
+            if (incoming === editor.value) {
+                // 같은 내용 (이 탭이 쓴 것이 늦게 알려졌거나 우연히 같음)
+            } else if (!editedHere) {
+                clearTimeout(saveTimer);
+                editor.replaceAll(incoming);
+                clearTimeout(saveTimer); // 바꾼 내용은 이미 저장소에 있음
+                showToast('다른 탭에서 고친 코드로 바꿨습니다. (Ctrl+Z로 되돌릴 수 있음)');
+            } else if (!conflictShown) {
+                conflictShown = true;
+                showToast(
+                    '이 문제의 코드를 다른 탭에서도 고쳤습니다. 이 탭에서 계속 고치면 그 탭의 변경을 덮어씁니다.',
+                    'error'
+                );
+            }
+        }
+    }
+    const testsChange = changes[`tests:${problemId}`];
+    if (testsChange && Array.isArray(testsChange.newValue) && !testsSaveTimer) {
+        const incoming = testsChange.newValue as CustomTest[];
+        if (JSON.stringify(incoming) !== JSON.stringify(customTests)) {
+            // 입력 칸을 고치는 중이면 다시 그리지 않습니다. (다음 저장 때 이 탭 것이 저장됨)
+            if (testList.contains(document.activeElement)) return;
+            customTests = incoming;
+            for (const key of [...testStates.keys()])
+                if (!key.startsWith('sample-') && !incoming.some((t) => t.id === key))
+                    testStates.delete(key);
+            renderTests();
+        }
+    }
+});
 
 // ── 문제 패널 접기 ───────────────────────────────────────────────
 const toggleProblemButton = $<HTMLButtonElement>('#toggle-problem');

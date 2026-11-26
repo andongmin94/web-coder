@@ -158,6 +158,17 @@ export class CodeEditor {
         this.view.focus();
     }
 
+    /** 내용을 통째로 바꿉니다. 일반 편집처럼 되돌리기(Ctrl+Z)로 돌아갈 수 있고 커서는 같은 줄 근처에 둡니다. */
+    replaceAll(code: string) {
+        const { state } = this.view;
+        if (state.doc.toString() === code) return;
+        const line = state.doc.lineAt(state.selection.main.head).number;
+        this.view.dispatch({ changes: { from: 0, to: state.doc.length, insert: code } });
+        const doc = this.view.state.doc;
+        const target = doc.line(Math.min(line, doc.lines));
+        this.view.dispatch({ selection: { anchor: target.from } });
+    }
+
     /** 줄(1부터)과 열(1부터, 없으면 줄 처음 글자)로 커서를 옮기고 화면 가운데로 보여 줍니다. */
     goTo(line: number, column: number | null) {
         const doc = this.view.state.doc;
