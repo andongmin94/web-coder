@@ -11,6 +11,7 @@ import {
 } from './fonts.ts';
 import { AUTO_THEME, EDITOR_THEMES } from './themes.ts';
 import { isKeymapName, KEYMAPS, type KeymapName } from './keymaps.ts';
+import { keyLabel, shortcutGroups } from './shortcuts.ts';
 import { storage } from './storage.ts';
 import { $, h } from './dom.ts';
 
@@ -201,4 +202,47 @@ export const setupEditorSettings = (editor: CodeEditor, showToast: ShowToast) =>
         editor.setKeymap(name);
         void storage.updatePrefs({ editorKeymap: name });
     });
+
+    // ── 단축키 목록: 지금 고른 키 설정의 주요 단축키 ──
+    const shortcutsDialog = $<HTMLDialogElement>('#shortcuts-dialog');
+    const mac = /Mac|iPhone|iPad/.test(navigator.platform);
+    const renderShortcuts = (name: KeymapName) => {
+        const label = KEYMAPS.find((k) => k.id === name)?.label ?? name;
+        $('#shortcuts-title').textContent = `단축키 — ${label}`;
+        $('#shortcuts-body').replaceChildren(
+            ...shortcutGroups(name).map((group) =>
+                h('section', { class: 'shortcuts-group' }, [
+                    h('h3', {}, group.title),
+                    ...group.items.map((item) =>
+                        h('div', { class: 'shortcuts-row' }, [
+                            h('span', {}, item.label),
+                            h(
+                                'span',
+                                { class: 'shortcuts-keys' },
+                                item.keys.map((key) => h('kbd', {}, keyLabel(key, mac)))
+                            ),
+                        ])
+                    ),
+                ])
+            ),
+            h(
+                'p',
+                { class: 'shortcuts-note' },
+                '키 설정은 설정의 "단축키"에서 바꿉니다. 브라우저가 쓰는 키(Ctrl+W 등)는 넣지 않았습니다.'
+            )
+        );
+    };
+    $('#show-shortcuts').addEventListener('click', () => {
+        $('#settings').hidden = true;
+        $('#settings-button').setAttribute('aria-expanded', 'false');
+        renderShortcuts(keymapSelect.value as KeymapName);
+        shortcutsDialog.showModal();
+    });
+    $('#shortcuts-close').addEventListener('click', () => shortcutsDialog.close());
+    // 바깥(어두운 배경)을 누르면 닫기
+    shortcutsDialog.addEventListener('click', (e) => {
+        if (e.target === shortcutsDialog) shortcutsDialog.close();
+    });
+    // 닫으면 에디터로 돌아갑니다.
+    shortcutsDialog.addEventListener('close', () => editor.focus());
 };

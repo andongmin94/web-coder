@@ -1266,3 +1266,227 @@ li[aria-selected] .cm-completionDetail {
     outline: 2px solid var(--primary);
     outline-offset: -1px;
 }
+
+/* ── 단축키 목록 (설정 → 단축키 목록 보기) ─────────────── */
+.shortcuts-dialog {
+    width: min(760px, calc(100vw - 32px));
+    max-height: calc(100vh - 64px);
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--fg);
+    box-shadow: var(--shadow);
+}
+
+.shortcuts-dialog::backdrop {
+    background: rgba(15, 23, 42, 0.35);
+}
+
+.shortcuts-head {
+    position: sticky;
+    top: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+}
+
+.shortcuts-head h2 {
+    margin: 0;
+    font-size: 15px;
+}
+
+.shortcuts-body {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 4px 24px;
+    padding: 8px 16px 16px;
+}
+
+.shortcuts-group h3 {
+    margin: 12px 0 6px;
+    color: var(--fg-muted);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.shortcuts-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+}
+
+.shortcuts-keys {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 4px;
+    white-space: nowrap;
+}
+
+.shortcuts-keys kbd {
+    /* 한글 글꼴(맑은 고딕)은 \를 ₩로 그려서 영문 글꼴을 먼저 */
+    font-family: 'Segoe UI', var(--ui);
+    opacity: 0.85;
+}
+
+.shortcuts-note {
+    grid-column: 1 / -1;
+    margin: 8px 0 0;
+    color: var(--fg-faint);
+    font-size: 12px;
+}
+
+/* ── 찾기 상자 (search-box.ts): VS Code처럼 에디터 오른쪽 위에 떠 있음 ── */
+/* 코드 위에 겹쳐 띄움 (CodeMirror 기본은 코드를 아래로 밀어내는 막대) */
+.cm-editor .cm-panels.cm-panels-top {
+    position: absolute;
+    top: 0;
+    left: auto;
+    right: 18px;
+    width: max-content;
+    max-width: calc(100% - 36px);
+    border: 0 !important;
+    background: none !important;
+}
+
+.cm-editor .cm-panel.sb-box {
+    display: flex;
+    align-items: flex-start;
+    gap: 2px;
+    margin-top: 2px;
+    padding: 4px 6px 4px 2px;
+    border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+    border-radius: 6px;
+    background-color: inherit;
+    background-image: linear-gradient(
+        color-mix(in srgb, currentColor 5%, transparent),
+        color-mix(in srgb, currentColor 5%, transparent)
+    );
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+    font: 13px var(--ui);
+}
+
+/* 에디터 배경색을 물려받도록 (CodeMirror 기본은 회색 막대) */
+.cm-editor .cm-panels-top,
+.cm-editor .cm-panels-top .cm-panel.sb-box {
+    color: inherit;
+}
+
+.cm-editor .cm-panels {
+    background-color: inherit;
+}
+
+.sb-box .sb-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.sb-box .sb-row {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.sb-box .sb-row[hidden] {
+    display: none;
+}
+
+.sb-box .sb-field {
+    display: flex;
+    align-items: center;
+    width: 250px;
+    max-width: 40vw;
+    padding-right: 2px;
+    border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+    border-radius: 4px;
+}
+
+.sb-box .sb-field:focus-within {
+    border-color: var(--primary);
+}
+
+.sb-box .cm-textfield {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 3px 6px;
+    border: 0;
+    outline: none;
+    background: none;
+    color: inherit;
+    font: 13px var(--mono);
+}
+
+.sb-box button {
+    margin: 0;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: none;
+    color: inherit;
+    font: 12px/1 var(--ui);
+    cursor: pointer;
+}
+
+.sb-box button:hover {
+    background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.sb-box .sb-toggle {
+    width: 22px;
+    height: 20px;
+    padding: 0;
+    font: 11px/1 var(--mono);
+    opacity: 0.75;
+}
+
+.sb-box .sb-toggle[aria-pressed='true'] {
+    border-color: var(--primary);
+    background: color-mix(in srgb, var(--primary) 22%, transparent);
+    opacity: 1;
+}
+
+.sb-box .sb-button {
+    min-width: 24px;
+    height: 24px;
+    padding: 0 4px;
+    font-size: 14px;
+}
+
+.sb-box .sb-text {
+    padding: 0 8px;
+    font-size: 12px;
+}
+
+.sb-box .sb-expand {
+    align-self: stretch;
+    width: 16px;
+    padding: 0;
+    font-size: 14px;
+    transition: transform 0.1s;
+}
+
+.sb-box .sb-expand.open {
+    transform: rotate(90deg);
+}
+
+.sb-box .sb-count {
+    min-width: 64px;
+    padding: 0 6px;
+    font-size: 12px;
+    white-space: nowrap;
+    opacity: 0.8;
+}
+
+.sb-box.sb-none .sb-count {
+    color: var(--fail);
+    opacity: 1;
+}

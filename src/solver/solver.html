@@ -143,6 +143,9 @@
                                     <span>단축키</span>
                                     <select id="editor-keymap" class="select select-sm"></select>
                                 </label>
+                                <button id="show-shortcuts" class="menu-item" type="button">
+                                    단축키 목록 보기
+                                </button>
                                 <div class="menu-divider" role="separator"></div>
                                 <button id="reset" class="menu-item" type="button" role="menuitem">
                                     템플릿으로 초기화
@@ -196,6 +199,21 @@
             </main>
         </div>
         <div id="toast" class="toast" role="status"></div>
+        <dialog id="shortcuts-dialog" class="shortcuts-dialog" aria-labelledby="shortcuts-title">
+            <div class="shortcuts-head">
+                <h2 id="shortcuts-title">단축키</h2>
+                <button
+                    id="shortcuts-close"
+                    class="btn btn-icon"
+                    type="button"
+                    title="닫기 (Esc)"
+                    aria-label="닫기"
+                >
+                    ✕
+                </button>
+            </div>
+            <div id="shortcuts-body" class="shortcuts-body"></div>
+        </dialog>
         <script src="solver.js"></script>
     </body>
 </html>

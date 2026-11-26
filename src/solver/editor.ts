@@ -10,30 +10,18 @@ import {
     keymap,
     lineNumbers,
 } from '@codemirror/view';
-import {
-    bracketMatching,
-    foldGutter,
-    foldKeymap,
-    indentOnInput,
-    indentUnit,
-} from '@codemirror/language';
-import { defaultKeymap, history, historyKeymap, indentLess } from '@codemirror/commands';
-import {
-    acceptCompletion,
-    closeBrackets,
-    closeBracketsKeymap,
-    completionKeymap,
-} from '@codemirror/autocomplete';
-import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
-import { lintKeymap } from '@codemirror/lint';
+import { bracketMatching, foldGutter, indentOnInput, indentUnit } from '@codemirror/language';
+import { history } from '@codemirror/commands';
+import { closeBrackets } from '@codemirror/autocomplete';
+import { highlightSelectionMatches } from '@codemirror/search';
 import type { RuntimeInfo } from '../shared/languages.ts';
 import type { LanguageIntel } from '../intel/types.ts';
 import { intelExtensions } from './intel-ext.ts';
-import { insertTab } from './tab.ts';
-import { keymapExtension, type KeymapName } from './keymaps.ts';
+import { BASE_KEYS, keymapExtension, vimWriteHandler, type KeymapName } from './keymaps.ts';
 import { indentGuides } from './indent-guides.ts';
 import { languageExtension } from './syntax.ts';
 import { formatContext } from './format.ts';
+import { searchBox } from './search-box.ts';
 import { AUTO_THEME, editorThemeExtension } from './themes.ts';
 
 export type EditorHandlers = {
@@ -127,25 +115,15 @@ export class CodeEditor {
                 highlightActiveLine(),
                 indentGuides,
                 highlightSelectionMatches(),
+                searchBox,
                 Prec.highest(
                     keymap.of([
                         { key: 'Mod-Enter', run: () => (onRun(), true) },
                         { key: 'Mod-Shift-Enter', run: () => (onSubmit(), true) },
                     ])
                 ),
-                keymap.of([
-                    ...closeBracketsKeymap,
-                    ...defaultKeymap,
-                    ...searchKeymap,
-                    ...historyKeymap,
-                    ...foldKeymap,
-                    ...completionKeymap,
-                    ...lintKeymap,
-                    // 자동 완성 목록이 열려 있으면 Tab으로 고릅니다. (VS Code처럼) 닫혀 있으면 들여쓰기
-                    { key: 'Tab', run: acceptCompletion },
-                    // 커서 자리에 공백 (여러 줄 선택이면 그 줄들을 들여쓰기), Shift+Tab은 내어쓰기
-                    { key: 'Tab', run: insertTab, shift: indentLess },
-                ]),
+                keymap.of(BASE_KEYS),
+                vimWriteHandler.of(onRun),
                 indentUnit.of('    '),
                 EditorState.tabSize.of(4),
                 intelExtensions(() => this.intel),

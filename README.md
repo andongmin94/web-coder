@@ -50,7 +50,8 @@
     - 글자 크기, 자동 줄바꿈, 소스 코드 공개 범위, 내 템플릿 저장
 - 단축키: `Ctrl+Enter` 실행, `Ctrl+Shift+Enter` 제출, `Ctrl+Space` 자동완성, `Ctrl+B` 문제 패널 접기
 - **코드 정렬**: `Shift+Alt+F` (IntelliJ 키맵은 `Ctrl+Alt+L`, Visual Studio는 `Ctrl+K, Ctrl+D`도). C·C++·Java·node.js는 [clang-format](https://github.com/wasm-fmt/clang-format)(LLVM 스타일, 들여쓰기 4칸, 한 줄 100자, include 순서 유지), Python은 [Ruff](https://github.com/wasm-fmt/ruff_fmt) 포매터로 정렬합니다. 둘 다 wasm이라 처음 정렬할 때만 불러옵니다. 한 번에 되돌릴 수 있고, 커서는 같은 코드 자리에 남습니다. 문법이 틀린 Python은 정렬하지 않고 줄 번호를 알려 줍니다.
-- 에디터 단축키는 설정에서 **VS Code**(기본), **IntelliJ**, **Visual Studio**, **Vim** 중에 고릅니다. 줄 옮기기·복제·삭제, 주석, 여러 커서, 줄 선택 등이 각 에디터와 같습니다. (Vim은 [@replit/codemirror-vim](https://github.com/replit/codemirror-vim)) 들여쓰기 안내선도 보입니다.
+- 에디터 단축키는 설정에서 **VS Code**(기본), **IntelliJ**, **Visual Studio**, **Vim** 중에 고릅니다. 줄 옮기기·복제·삭제, 주석, 여러 커서, 줄 선택 등이 각 에디터와 같습니다. (Vim은 [@replit/codemirror-vim](https://github.com/replit/codemirror-vim)) 들여쓰기 안내선도 보입니다. 설정의 **단축키 목록 보기**에서 고른 방식의 단축키를 볼 수 있고, Vim에서는 `:w`가 예제 실행입니다.
+- 찾기(`Ctrl+F`)·바꾸기(`Ctrl+H`)는 VS Code처럼 에디터 오른쪽 위의 작은 상자로 뜹니다. 대소문자(Aa)·단어 단위(ab)·정규식(.*) 단추와 결과 수(`2/5`)가 있습니다.
 - 제출은 BOJ 원래 폼에 코드를 채워 원래 제출 버튼으로 보냅니다. (reCAPTCHA 등 BOJ의 제출 절차를 그대로 따름)
 
 ## 인텔리센스
@@ -84,6 +85,8 @@ src/
 │  ├─ editor-settings.ts / fonts.ts # 설정 창 (테마, 화면 밝기, 글꼴)
 │  ├─ tests-view.ts  # 예제·내 테스트 카드, 출력 비교
 │  ├─ format.ts      # 코드 정렬 (clang-format, Ruff wasm)
+│  ├─ keymaps.ts / shortcuts.ts # 키 설정 4종 / 단축키 목록
+│  ├─ search-box.ts  # VS Code식 찾기·바꾸기 상자
 │  └─ problem-view.ts # 문제 패널 (정화 + KaTeX)
 ├─ runner/
 │  ├─ pool.ts        # 워커 풀, C++ 컴파일 캐시, 시간 제한

@@ -4,16 +4,21 @@
 // (브라우저가 가로채는 키는 쓸 수 없습니다. 예: IntelliJ의 Ctrl+W 선택 확장은 탭 닫기라 넣지 않음)
 // 코드 정렬(format.ts)은 어느 키맵이든 Shift+Alt+F, 그리고 각 에디터의 서식 키로 합니다.
 // Vim은 @replit/codemirror-vim(MIT)을 씁니다.
-import { EditorSelection, Prec, type Extension, type StateCommand } from '@codemirror/state';
+import { EditorSelection, Facet, Prec, type Extension, type StateCommand } from '@codemirror/state';
 import {
     crosshairCursor,
     EditorView,
     keymap,
     rectangularSelection,
     type Command,
+    type KeyBinding,
 } from '@codemirror/view';
 import {
     copyLineDown,
+    defaultKeymap,
+    historyKeymap,
+    indentLess,
+    redo,
     cursorMatchingBracket,
     deleteLine,
     indentSelection,
@@ -24,11 +29,16 @@ import {
     moveLineUp,
     toggleBlockComment,
 } from '@codemirror/commands';
-import { vim } from '@replit/codemirror-vim';
+import { vim, Vim } from '@replit/codemirror-vim';
+import { acceptCompletion, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete';
+import { foldKeymap } from '@codemirror/language';
+import { lintKeymap } from '@codemirror/lint';
+import { insertTab } from './tab.ts';
 import { formatDocument } from './format.ts';
+import { openReplacePanel } from './search-box.ts';
 import {
     gotoLine,
-    openSearchPanel,
+    searchKeymap,
     selectNextOccurrence,
     selectSelectionMatches,
 } from '@codemirror/search';
@@ -127,6 +137,7 @@ const addCursorVertically =
 const VSCODE_KEYS = [
     { key: 'Mod-l', run: selectLineExtend },
     { key: 'Mod-g', run: gotoLine },
+    { key: 'Mod-h', run: openReplacePanel }, // 바꾸기
     { key: 'Mod-Alt-ArrowUp', run: addCursorVertically(false) },
     { key: 'Mod-Alt-ArrowDown', run: addCursorVertically(true) },
 ];
@@ -142,7 +153,7 @@ const INTELLIJ_KEYS = [
     { key: 'Mod-Shift-ArrowUp', run: moveLineUp },
     { key: 'Mod-Shift-ArrowDown', run: moveLineDown },
     { key: 'Mod-g', run: gotoLine },
-    { key: 'Mod-r', run: openSearchPanel }, // 찾기 창에 바꾸기 칸이 같이 있음
+    { key: 'Mod-r', run: openReplacePanel }, // 바꾸기
     { key: 'Shift-Enter', run: insertBlankLine }, // 아래에 새 줄
     { key: 'Mod-Alt-i', run: indentSelection }, // 자동 들여쓰기
     { key: 'Mod-Alt-l', run: formatDocument }, // 코드 정렬 (Reformat Code)
@@ -159,10 +170,36 @@ const VISUAL_STUDIO_KEYS = [
     { key: 'Mod-k Mod-d', run: formatDocument }, // 문서 서식
     { key: 'Mod-]', run: cursorMatchingBracket }, // 짝 괄호로
     { key: 'Mod-g', run: gotoLine },
-    { key: 'Mod-h', run: openSearchPanel }, // 바꾸기
+    { key: 'Mod-h', run: openReplacePanel }, // 바꾸기
     { key: 'Shift-Alt-.', run: selectNextOccurrence }, // 다음 같은 단어에 커서 추가
     { key: 'Shift-Alt-;', run: selectSelectionMatches }, // 같은 단어 모두
 ];
+
+/** 어느 키 설정이든 깔리는 기본 키 (CodeMirror 기본 + 자동 완성·Tab) */
+export const BASE_KEYS: readonly KeyBinding[] = [
+    ...closeBracketsKeymap,
+    ...defaultKeymap,
+    ...searchKeymap,
+    ...historyKeymap,
+    // CodeMirror는 Ctrl+Shift+Z 다시 실행을 Linux에만 둡니다. VS Code·IntelliJ처럼 Windows에서도
+    // (IntelliJ 키 설정은 Ctrl+Y가 줄 삭제라 이것이 유일한 다시 실행 키)
+    { key: 'Mod-Shift-z', run: redo, preventDefault: true },
+    ...foldKeymap,
+    ...completionKeymap,
+    ...lintKeymap,
+    // 자동 완성 목록이 열려 있으면 Tab으로 고릅니다. (VS Code처럼) 닫혀 있으면 들여쓰기
+    { key: 'Tab', run: acceptCompletion },
+    // 커서 자리에 공백 (여러 줄 선택이면 그 줄들을 들여쓰기), Shift+Tab은 내어쓰기
+    { key: 'Tab', run: insertTab, shift: indentLess },
+];
+
+/** Vim의 :w(저장)는 예제 실행으로. 코드는 자동 저장되므로 저장할 일이 없습니다. */
+export const vimWriteHandler = Facet.define<() => void, (() => void) | null>({
+    combine: (values) => values[0] ?? null,
+});
+Vim.defineEx('write', 'w', (cm: { cm6: EditorView }) => {
+    cm.cm6.state.facet(vimWriteHandler)?.();
+});
 
 /** 모든 키맵에 공통: VS Code의 문서 서식 키 */
 const FORMAT_KEYS = keymap.of([{ key: 'Shift-Alt-f', run: formatDocument }]);
