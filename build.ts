@@ -239,6 +239,12 @@ const copyStatic = async () => {
     // 원본 아이콘(크기별 아이콘을 만드는 데 씀)과 README용 로고는 확장에 필요 없습니다.
     await rm(`${outdir}/asset/icon.png`);
     await rm(`${outdir}/logo.svg`);
+    // 라이선스: public/licenses/의 원문에 npm 패키지에 들어 있는 것을 더합니다. (README.txt에 목록)
+    await cp('node_modules/typescript-js/LICENSE.txt', `${outdir}/licenses/Apache-2.0.txt`);
+    await cp(
+        'node_modules/pyright/dist/typeshed-fallback/LICENSE',
+        `${outdir}/licenses/typeshed-LICENSE.txt`
+    );
     await cp('src/solver/solver.html', `${outdir}/solver.html`);
     await cp('src/sandbox/sandbox.html', `${outdir}/sandbox.html`);
     await mkdir(`${outdir}/clang`, { recursive: true });
