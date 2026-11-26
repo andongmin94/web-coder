@@ -83,7 +83,12 @@ src/
 │  ├─ boj-main.ts    # MAIN world 스크립트: 페이지의 CodeMirror/폼 조작
 │  └─ problem.ts     # 문제 페이지 HTML 파싱
 ├─ solver/           # iframe 안의 UI (확장 페이지, 바닐라 TS + CodeMirror 6)
-│  ├─ solver.ts      # 진입점: 상태, 실행·제출 흐름
+│  ├─ solver.ts      # 진입점: 모듈 잇기, 초기화, 언어 바꾸기, BOJ 페이지와 메시지
+│  ├─ state.ts / elements.ts # 화면 상태 / 요소
+│  ├─ code-store.ts  # 코드·내 테스트 저장, 다른 탭과 맞추기, 저장 공간 자동 관리(storage-prune.ts)
+│  ├─ results-view.ts / run-controller.ts # 결과 패널(카드 목록, 상태 줄) / 실행·중단
+│  ├─ submit-flow.ts / decisions.ts # 제출 / 첫 언어 고르기·제출 전 확인 판단
+│  ├─ templates.ts / problem-pane.ts / intel-registry.ts # 내 템플릿 / 문제 패널 / 언어별 인텔리센스
 │  ├─ editor-settings.ts / fonts.ts # 설정 창 (테마, 화면 밝기, 글꼴)
 │  ├─ tests-view.ts  # 예제·내 테스트 카드, 출력 비교
 │  ├─ format.ts      # 코드 정렬 (clang-format, Ruff wasm)
@@ -91,7 +96,9 @@ src/
 │  ├─ search-box.ts  # VS Code식 찾기·바꾸기 상자
 │  └─ problem-view.ts # 문제 패널 (정화 + KaTeX)
 ├─ runner/
-│  ├─ pool.ts        # 워커 풀, C++ 컴파일 캐시, 시간 제한
+│  ├─ pool.ts        # 실행 관리자: 워커 풀, C++ 컴파일 캐시, node.js 깊은 재귀 전환
+│  ├─ clients.ts / sandbox-client.ts # 실행·컴파일 워커 연결 / sandbox 페이지 연결
+│  ├─ watchdog.ts    # 실행 시간 제한 (준비 시간과 실행 시간을 따로)
 │  ├─ worker.ts      # 실행 워커 진입점
 │  ├─ compiler-worker.ts # C++ 컴파일·인텔리센스 (YoWASP clang, PCH 캐시)
 │  ├─ cpp.ts / python.ts   # 결과물/파이썬 실행 (WASI)
@@ -102,7 +109,7 @@ src/
 │  ├─ cpp-header.ts / cpp-pbds.ts # bits/stdc++.h, 빠른 입출력, GCC 호환 헤더
 │  ├─ wasi.ts        # WASI 실행, 기본 파일 시스템 캐시
 │  └─ tar.ts         # tar 파서
-├─ sandbox/          # node.js 실행용 sandbox 페이지 (eval 허용, extension API 없음)
+├─ sandbox/          # node.js 실행, Java 컴파일·실행용 sandbox 페이지 (eval 허용, extension API 없음)
 ├─ intel/            # 인텔리센스 엔진 (C++ clang, TS 서비스, Pyright, Java 색인)
 ├─ judge/            # 출력 비교, 실수 오차 비교
 └─ shared/           # 언어 매핑, 메시지 프로토콜
