@@ -2,40 +2,27 @@
 // - C++: 컴파일 워커(YoWASP clang)에서 한 번만 컴파일, 결과 wasm을 모든 테스트에 재사용
 //        bits/stdc++.h PCH가 없으면 별도 워커에서 만들어 IndexedDB에 저장
 // - C++ 결과물/Python: 실행 워커 풀에서 병렬 실행, 시간 초과 시 terminate 후 교체
-// - JavaScript: sandbox 페이지(eval 허용)의 워커에서 V8로 실행
-//               재귀가 깊어 스택이 넘치면 실행 워커의 QuickJS 깊은 재귀 모드로 다시 실행 (node-deep.ts)
-import { fetchAsset } from '../shared/assets.ts';
-import { JAVA_RELEASES, type ResolvedLanguage } from '../shared/languages.ts';
-import type {
-    SandboxCheckResponse,
-    SandboxCompileResponse,
-    SandboxRequest,
-    SandboxResponse,
-    SandboxRunResponse,
-} from '../sandbox/protocol.ts';
+// - JavaScript, Java: sandbox 페이지(eval 허용, sandbox-client.ts)에서 실행
+//               node.js가 재귀가 깊어 스택이 넘치면 실행 워커의 QuickJS 깊은 재귀 모드로 다시 실행 (node-deep.ts)
+// 워커 연결은 clients.ts, sandbox 연결은 sandbox-client.ts에 있습니다.
+import type { ResolvedLanguage } from '../shared/languages.ts';
+import type { CppAnalyze } from '../intel/types.ts';
 import { usesBitsStdcxx, usesExceptions } from './cpp-header.ts';
 import { jspi } from './jspi.ts';
-import type {
-    CompilerRequest,
-    CompilerResponse,
-    RunRequest,
-    RunResult,
-    WorkerResponse,
-} from './types.ts';
-import { createWatchdog } from './watchdog.ts';
-import type { CppAnalyze } from '../intel/types.ts';
+import {
+    COMPILE_TIMEOUT_MS,
+    CompilerWorker,
+    EMPTY_OUTPUT,
+    LOAD_TIMEOUT_MS,
+    RunnerWorker,
+    partialOutput,
+} from './clients.ts';
+import { Sandbox } from './sandbox-client.ts';
+import type { CompileOutcome, RunRequest, RunResult } from './types.ts';
 
-const RUNNER_URL = 'runner-worker.js';
 const CPP_COMPILER_URL = 'clang/compiler-worker.js';
-const SANDBOX_URL = 'sandbox.html';
-/** 런타임 로딩(수십 MB wasm 컴파일)에 허용하는 시간 */
-const LOAD_TIMEOUT_MS = 90_000;
-const COMPILE_TIMEOUT_MS = 120_000;
 /** 컴파일 전에 PCH 생성을 기다려 주는 최대 시간 (넘으면 PCH 없이 컴파일) */
 const PCH_WAIT_MS = 60_000;
-const SANDBOX_READY_TIMEOUT_MS = 10_000;
-
-const EMPTY_OUTPUT = { stdout: '', stderr: '', exitCode: -1, truncated: false };
 
 /** V8의 호출 스택 한계로 끝난 node.js 실행인지 (사용자가 잡지 않은 RangeError, js-worker가 표시) */
 const isJsStackOverflow = (result: RunResult) =>
@@ -47,367 +34,7 @@ const NODE_DEEP_NOTICE =
 const NODE_DEEP_TIMEOUT_NOTICE =
     ' 이번 시간 초과도 이 모드가 느려서일 수 있으니, 깊은 재귀를 반복문(스택)으로 바꾸면 여기서도 확인할 수 있습니다.';
 
-type Final<T> = Exclude<T, { type: 'started' } | { type: 'output' }>;
-/** 실행 중 받은 출력 (시간 초과 시 보여 줄 부분 출력) */
-type Partial = { stdout: string; stderr: string };
-type TimedOut = { type: 'timeout'; partial: Partial };
-
-const partialOutput = (partial: Partial) => ({
-    stdout: partial.stdout,
-    stderr: partial.stderr,
-    exitCode: -1,
-    truncated: false,
-});
-type WithoutId<T> = T extends unknown ? Omit<T, 'id'> : never;
-
-// ── 실행 워커 ────────────────────────────────────────────────────────
-
-class RunnerWorker {
-    readonly worker = new Worker(RUNNER_URL);
-    busy = false;
-    /** 워커에서 잡히지 않은 오류가 났음: 상태를 믿을 수 없으니 다시 쓰지 않습니다. */
-    crashed = false;
-    private nextId = 1;
-    private pending = new Map<
-        number,
-        {
-            resolve: (r: Final<WorkerResponse> | null) => void;
-            onStarted: () => void;
-            partial: Partial;
-        }
-    >();
-
-    constructor() {
-        this.worker.addEventListener('message', (e: MessageEvent<WorkerResponse>) => {
-            const p = this.pending.get(e.data.id);
-            if (!p) return;
-            if (e.data.type === 'started') {
-                p.onStarted();
-                return;
-            }
-            if (e.data.type === 'output') {
-                if (e.data.reset) p.partial.stdout = p.partial.stderr = '';
-                p.partial.stdout += e.data.stdout;
-                p.partial.stderr += e.data.stderr;
-                return;
-            }
-            this.pending.delete(e.data.id);
-            p.resolve(e.data);
-        });
-        this.worker.addEventListener('error', (e) => {
-            e.preventDefault();
-            this.crashed = true;
-            for (const [id, p] of this.pending)
-                p.resolve({ type: 'error', id, message: e.message || '워커 오류' });
-            this.pending.clear();
-        });
-    }
-
-    warmUp(runtime: string) {
-        this.worker.postMessage({ type: 'warmup', runtime });
-    }
-
-    /**
-     * 처음엔 loadTimeoutMs, 워커가 'started'를 알리면 그때부터 runTimeoutMs로 다시 잽니다.
-     * 시간이 넘으면 그때까지 받은 출력과 함께 'timeout', 워커가 종료되면 null.
-     */
-    request(message: Record<string, unknown>, loadTimeoutMs: number, runTimeoutMs: number) {
-        const id = this.nextId++;
-        return new Promise<Final<WorkerResponse> | TimedOut | null>((resolve) => {
-            const partial: Partial = { stdout: '', stderr: '' };
-            const watchdog = createWatchdog(loadTimeoutMs, runTimeoutMs, () => {
-                this.pending.delete(id);
-                resolve({ type: 'timeout', partial });
-            });
-            this.pending.set(id, {
-                resolve: (r) => {
-                    watchdog.stop();
-                    resolve(r);
-                },
-                // 깊은 재귀 모드로 다시 실행할 때도 옵니다. (그때부터 다시 잼)
-                onStarted: () => watchdog.started(),
-                partial,
-            });
-            this.worker.postMessage({ ...message, id });
-        });
-    }
-
-    terminate() {
-        this.worker.terminate();
-        for (const p of this.pending.values()) p.resolve(null);
-        this.pending.clear();
-    }
-}
-
-// ── 컴파일 워커 (C++: YoWASP clang, Java: teavm-javac) ───────────────
-
-class CompilerWorker {
-    readonly worker: Worker;
-    private nextId = 1;
-    private pending = new Map<number, (r: CompilerResponse | null) => void>();
-
-    constructor(url: string, options?: WorkerOptions) {
-        this.worker = new Worker(url, options);
-        this.worker.addEventListener('message', (e: MessageEvent<CompilerResponse>) => {
-            const resolve = this.pending.get(e.data.id);
-            if (!resolve) return;
-            this.pending.delete(e.data.id);
-            resolve(e.data);
-        });
-        this.worker.addEventListener('error', (e) => {
-            e.preventDefault();
-            for (const [id, resolve] of this.pending)
-                resolve({ type: 'error', id, message: e.message || '컴파일러 워커 오류' });
-            this.pending.clear();
-            this.crashed = true;
-        });
-    }
-
-    /** 워커 오류가 난 적이 있는지. 그런 워커는 버리고 새로 만듭니다. (다음 컴파일이 시간 제한까지 멈추지 않게) */
-    crashed = false;
-
-    send(message: CompilerRequest) {
-        this.worker.postMessage(message);
-    }
-
-    request(message: WithoutId<Extract<CompilerRequest, { id: number }>>, timeoutMs: number) {
-        const id = this.nextId++;
-        return new Promise<CompilerResponse | null>((resolve) => {
-            const timer = setTimeout(() => {
-                this.pending.delete(id);
-                resolve(null);
-            }, timeoutMs);
-            this.pending.set(id, (r) => {
-                clearTimeout(timer);
-                resolve(r);
-            });
-            this.worker.postMessage({ ...message, id });
-        });
-    }
-
-    terminate() {
-        this.worker.terminate();
-        for (const resolve of this.pending.values()) resolve(null);
-        this.pending.clear();
-    }
-}
-
-// ── sandbox (eval 허용: JavaScript 실행, Java 컴파일·실행) ─────────────
-
-const JAVA_ASSETS = {
-    wasm: 'java/compiler.wasm',
-    /** javac SDK: 버전별로 거른 것과 제한 없는 것('') */
-    sdks: {
-        '': 'java/compile-classlib.bin',
-        ...Object.fromEntries(JAVA_RELEASES.map((r) => [r, `java/compile-classlib-${r}.bin`])),
-    } as Record<string, string>,
-    classlib: 'java/runtime-classlib.bin',
-};
-
-class Sandbox {
-    private frame: HTMLIFrameElement;
-    /** sandbox 페이지가 준비됐다는 신호 (한 번 오면 계속 true) */
-    private isReady = false;
-    private readyPromise: Promise<true>;
-    /** cancelAll 횟수. 준비를 기다리던 실행이 그사이 중단됐는지 알아보는 데 씁니다. */
-    private cancelSeq = 0;
-    private javaAssetsSent: Promise<void> | null = null;
-    private nextId = 1;
-    private pending = new Map<
-        number,
-        (r: SandboxRunResponse | SandboxCompileResponse | SandboxCheckResponse) => void
-    >();
-
-    constructor() {
-        this.frame = document.createElement('iframe');
-        this.frame.src = SANDBOX_URL;
-        this.frame.hidden = true;
-        this.frame.setAttribute('sandbox', 'allow-scripts');
-        let markReady!: () => void;
-        this.readyPromise = new Promise((r) => {
-            markReady = () => {
-                this.isReady = true;
-                r(true);
-            };
-        });
-        window.addEventListener('message', (e: MessageEvent<SandboxResponse>) => {
-            if (e.source !== this.frame.contentWindow) return;
-            if (e.data.kind === 'ready') {
-                markReady();
-                return;
-            }
-            const resolve = this.pending.get(e.data.id);
-            if (!resolve) return;
-            this.pending.delete(e.data.id);
-            resolve(e.data);
-        });
-        document.body.appendChild(this.frame);
-    }
-
-    /**
-     * 준비될 때까지 기다리되, 이번 요청은 SANDBOX_READY_TIMEOUT_MS까지만 기다립니다.
-     * (느린 PC에서 늦게 준비돼도 다음 요청부터는 정상으로 돌도록 영구 실패로 만들지 않습니다)
-     */
-    private waitReady(): Promise<boolean> {
-        if (this.isReady) return Promise.resolve(true);
-        return Promise.race([
-            this.readyPromise,
-            new Promise<false>((r) => setTimeout(() => r(false), SANDBOX_READY_TIMEOUT_MS)),
-        ]);
-    }
-
-    private post(message: SandboxRequest, transfer: Transferable[] = []) {
-        // sandbox 페이지는 opaque origin이라 targetOrigin을 '*'로 보냅니다. (받는 쪽은 frame이 고정)
-        this.frame.contentWindow?.postMessage(message, '*', transfer);
-    }
-
-    /** Java 컴파일러 파일을 읽어 sandbox로 넘깁니다. (sandbox는 확장 리소스를 직접 못 읽음) */
-    prepareJava() {
-        this.javaAssetsSent ??= (async () => {
-            if (!(await this.waitReady())) throw new Error('sandbox 페이지를 불러오지 못했습니다.');
-            const read = async (path: string) => {
-                const response = await fetchAsset(path);
-                if (!response.ok) throw new Error(`${path}를 불러오지 못했습니다.`);
-                return response.arrayBuffer();
-            };
-            const releases = Object.keys(JAVA_ASSETS.sdks);
-            const [wasm, classlib, ...sdkList] = await Promise.all([
-                read(JAVA_ASSETS.wasm),
-                read(JAVA_ASSETS.classlib),
-                ...releases.map((r) => read(JAVA_ASSETS.sdks[r])),
-            ]);
-            const sdks = Object.fromEntries(releases.map((r, i) => [r, sdkList[i]]));
-            this.post({ type: 'java-assets', wasm, sdks, classlib }, [wasm, classlib, ...sdkList]);
-        })();
-        this.javaAssetsSent.catch(() => (this.javaAssetsSent = null));
-        return this.javaAssetsSent;
-    }
-
-    private request<T extends SandboxRunResponse | SandboxCompileResponse | SandboxCheckResponse>(
-        build: (id: number) => SandboxRequest,
-        timeoutMs: number,
-        onTimeout: (id: number) => T,
-        transfer: Transferable[] = []
-    ) {
-        const id = this.nextId++;
-        return new Promise<T>((resolve) => {
-            const timer = setTimeout(() => {
-                this.pending.delete(id);
-                resolve(onTimeout(id));
-            }, timeoutMs);
-            this.pending.set(id, (r) => {
-                clearTimeout(timer);
-                resolve(r as T);
-            });
-            this.post(build(id), transfer);
-        });
-    }
-
-    async compileJava(source: string, release: string): Promise<CompileOutcome> {
-        try {
-            await this.prepareJava();
-        } catch (error) {
-            return {
-                ok: false,
-                diagnostics: error instanceof Error ? error.message : String(error),
-            };
-        }
-        const res = await this.request<SandboxCompileResponse>(
-            (id) => ({ type: 'java-compile', id, source, release }),
-            COMPILE_TIMEOUT_MS + 15_000,
-            (id) => ({
-                kind: 'compile',
-                id,
-                ok: false,
-                diagnostics: 'Java 컴파일러가 응답하지 않습니다.',
-            })
-        );
-        return res.ok && res.artifact
-            ? { ok: true, artifact: res.artifact, diagnostics: res.diagnostics }
-            : { ok: false, diagnostics: res.diagnostics };
-    }
-
-    /** Java 실시간 진단 (javac만) */
-    async checkJava(source: string, release: string) {
-        try {
-            await this.prepareJava();
-        } catch {
-            return [];
-        }
-        const res = await this.request<SandboxCheckResponse>(
-            (id) => ({ type: 'java-check', id, source, release }),
-            45_000,
-            (id) => ({ kind: 'check', id, diagnostics: [] })
-        );
-        return res.diagnostics;
-    }
-
-    async run(
-        language: 'javascript' | 'java',
-        payload: { source: string; artifact?: Uint8Array },
-        stdin: string,
-        timeoutMs: number
-    ): Promise<RunResult> {
-        // 한 번 스택이 넘친 Java 프로그램의 다음 테스트는 넘칠 첫 시도를 건너뜁니다.
-        const deep = language === 'java' && payload.artifact === this.deepJavaArtifact;
-        const cancelSeq = this.cancelSeq;
-        const ready = await this.waitReady();
-        // 준비를 기다리는 사이 중단했으면 실행하지 않습니다. (준비 전 보낸 중단 신호는 받을 곳이 없음)
-        if (cancelSeq !== this.cancelSeq)
-            return { status: 'cancelled', output: EMPTY_OUTPUT, timeMs: 0 };
-        if (!ready) {
-            return {
-                status: 'internal-error',
-                output: EMPTY_OUTPUT,
-                timeMs: 0,
-                message: '실행기(sandbox 페이지)를 불러오지 못했습니다.',
-            };
-        }
-        const res = await this.request<SandboxRunResponse>(
-            (id) =>
-                language === 'java'
-                    ? {
-                          type: 'run',
-                          id,
-                          language,
-                          artifact: payload.artifact!,
-                          stdin,
-                          timeoutMs,
-                          deep,
-                      }
-                    : { type: 'run', id, language, source: payload.source, stdin, timeoutMs },
-            // sandbox가 응답하지 않는 경우를 대비한 안전장치
-            timeoutMs + LOAD_TIMEOUT_MS,
-            (id) => ({
-                kind: 'run',
-                id,
-                status: 'internal-error',
-                message: '실행기가 응답하지 않습니다.',
-            })
-        );
-        if (res.deep && payload.artifact) this.deepJavaArtifact = payload.artifact;
-        return {
-            status: res.status,
-            output: res.output ?? EMPTY_OUTPUT,
-            timeMs: res.timeMs ?? 0,
-            message: res.message,
-        };
-    }
-
-    /** 깊은 재귀 모드가 필요했던 Java 프로그램 (컴파일 결과) */
-    private deepJavaArtifact: Uint8Array | null = null;
-
-    cancelAll() {
-        this.cancelSeq++;
-        this.post({ type: 'cancel' });
-    }
-}
-
 // ── 풀 ───────────────────────────────────────────────────────────────
-
-export type CompileOutcome =
-    | { ok: true; artifact?: Uint8Array; diagnostics: string }
-    | { ok: false; diagnostics: string };
 
 export class RunnerPool {
     private workers: RunnerWorker[] = [];
@@ -420,14 +47,19 @@ export class RunnerPool {
     private generation = 0;
     private readonly size: number;
 
+    /** 실행 워커를 만드는 방법 (테스트에서는 가짜 워커) */
+    private readonly createRunner: () => RunnerWorker;
+
     constructor(
-        size = Math.max(1, Math.min(4, Math.floor((navigator.hardwareConcurrency || 2) / 2)))
+        size = Math.max(1, Math.min(4, Math.floor((navigator.hardwareConcurrency || 2) / 2))),
+        createRunner = () => new RunnerWorker()
     ) {
         this.size = size;
+        this.createRunner = createRunner;
     }
 
     private static createCppCompiler() {
-        return new CompilerWorker(CPP_COMPILER_URL, { type: 'module' });
+        return new CompilerWorker(new Worker(CPP_COMPILER_URL, { type: 'module' }));
     }
 
     private getCompiler() {
@@ -463,7 +95,7 @@ export class RunnerPool {
             void this.sandbox;
             return;
         }
-        while (this.workers.length < this.size) this.workers.push(new RunnerWorker());
+        while (this.workers.length < this.size) this.workers.push(this.createRunner());
         for (const w of this.workers) w.warmUp(lang.runtime);
     }
 
@@ -559,7 +191,7 @@ export class RunnerPool {
             if (generation !== this.generation) return null;
             let worker = this.workers.find((w) => !w.busy);
             if (!worker && this.workers.length < this.size) {
-                worker = new RunnerWorker();
+                worker = this.createRunner();
                 this.workers.push(worker);
             }
             if (worker) {

@@ -91,3 +91,8 @@ export type RunResult = {
     /** 판정과 상관없이 결과 카드에 보여 줄 안내 (예: 깊은 재귀 모드로 다시 실행함) */
     notice?: string;
 };
+
+/** 컴파일 결과 (C++, Java). 다른 언어는 바로 ok */
+export type CompileOutcome =
+    | { ok: true; artifact?: Uint8Array; diagnostics: string }
+    | { ok: false; diagnostics: string };
