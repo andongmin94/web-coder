@@ -14,6 +14,7 @@ import { EditorView } from '@codemirror/view';
 import { tags as t, type Tag } from '@lezer/highlight';
 import { EXTRACTED_THEMES } from './theme-data.ts';
 import type { EditorTheme, Palette, ThemeDefinition } from './theme-types.ts';
+import { visibleSelection } from './theme-contrast.ts';
 
 export type { EditorTheme, Palette, ThemeDefinition } from './theme-types.ts';
 
@@ -149,7 +150,16 @@ export const SYNTAX_RULES: {
 /** 색에 투명도를 붙입니다. (이미 투명도가 있는 색은 그대로) */
 const alpha = (color: string, suffix: string) => (color.length === 7 ? color + suffix : color);
 
-const fromPalette = (p: Palette, dark: boolean): Extension => [
+const fromPalette = (palette: Palette, dark: boolean): Extension => {
+    // 선택 색이 배경과 거의 같은 테마는 고른 글자가 보이도록 대비를 조금 올립니다. (theme-contrast.ts)
+    const p = {
+        ...palette,
+        selection: visibleSelection(palette.selection, palette.bg, palette.fg),
+    };
+    return themeOf(p, dark);
+};
+
+const themeOf = (p: Palette, dark: boolean): Extension => [
     EditorView.theme(
         {
             '&': { color: p.fg, backgroundColor: p.bg },

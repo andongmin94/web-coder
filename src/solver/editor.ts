@@ -24,6 +24,18 @@ import { formatContext } from './format.ts';
 import { searchBox } from './search-box.ts';
 import { AUTO_THEME, editorThemeExtension } from './themes.ts';
 
+/**
+ * 글자를 고르는 동안에는 현재 줄 배경을 끕니다. (VS Code처럼) 대부분의 테마는 현재 줄 색이 불투명해서,
+ * 그 위에 그려지는 줄 배경이 그 아래 선택 영역을 가려 커서가 있는 줄의 선택이 보이지 않았습니다.
+ */
+const activeLineYieldsToSelection: Extension = [
+    EditorView.editorAttributes.compute(['selection'], (state): Record<string, string> =>
+        state.selection.ranges.some((r) => !r.empty) ? { class: 'cm-has-selection' } : {}
+    ),
+    // 테마의 .cm-activeLine보다 우선하도록 클래스를 하나 더 붙인 선택자
+    EditorView.theme({ '&.cm-has-selection .cm-activeLine': { backgroundColor: 'transparent' } }),
+];
+
 export type EditorHandlers = {
     onChange: (code: string) => void;
     onRun: () => void;
@@ -113,6 +125,7 @@ export class CodeEditor {
                 bracketMatching(),
                 closeBrackets(),
                 highlightActiveLine(),
+                activeLineYieldsToSelection,
                 indentGuides,
                 highlightSelectionMatches(),
                 searchBox,
