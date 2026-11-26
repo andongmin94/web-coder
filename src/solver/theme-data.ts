@@ -1,6 +1,6 @@
 // tools/themes/extract.mjs가 만든 파일입니다. 직접 고치지 마세요.
 // 설치된 VS Code, IntelliJ IDEA, Rider의 테마 파일에서 뽑은 색입니다.
-import type { ThemeDefinition } from './themes.ts';
+import type { ThemeDefinition } from './theme-types.ts';
 
 export const EXTRACTED_THEMES: ThemeDefinition[] = [
     {

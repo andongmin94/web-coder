@@ -2,18 +2,13 @@
 // JDK 색인(classfile.ts)과 같은 모양으로 만들어, `node.` 뒤의 자동완성이나 직접 만든 메서드의
 // 시그니처 힌트에 씁니다. 컴파일러가 아니라 정규식 수준의 분석이라, 흔한 선언 형태만 알아봅니다.
 import type { JavaClass, JavaMember } from './classfile.ts';
+import { blankLiterals } from '../shared/source-text.ts';
 
 export type UserClass = JavaClass & {
     /** 클래스 본문의 범위 (여는 중괄호 ~ 닫는 중괄호) */
     from: number;
     to: number;
 };
-
-/** 주석과 문자열·문자 리터럴을 같은 길이의 공백으로 바꿉니다. (위치는 그대로) */
-export const blankLiterals = (code: string) =>
-    code.replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'/g, (m) =>
-        m.replace(/[^\n]/g, ' ')
-    );
 
 /** 최상위 구분자(기본 쉼표)로 나누기 (괄호/꺾쇠 안은 무시) */
 export const splitTop = (text: string, sep = ',') => {

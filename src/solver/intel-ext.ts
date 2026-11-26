@@ -19,7 +19,7 @@ import {
     type ViewUpdate,
 } from '@codemirror/view';
 import type { IntelCompletion, IntelSignature, LanguageIntel } from '../intel/types.ts';
-import { blankLiterals } from '../intel/java-source.ts';
+import { blankLiterals } from '../shared/source-text.ts';
 import { h } from './dom.ts';
 
 const toCompletion = (item: IntelCompletion): Completion => {

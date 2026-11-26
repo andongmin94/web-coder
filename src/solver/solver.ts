@@ -627,7 +627,7 @@ const intelFor = (lang: ResolvedLanguage): LanguageIntel => {
     if (!intel) {
         switch (lang.runtime) {
             case 'cpp':
-                intel = createCppIntel(pool, lang.cppStd ?? 'c++17');
+                intel = createCppIntel(pool.cppAnalyze, lang.cppStd ?? 'c++17');
                 break;
             case 'javascript':
                 intel = createJavaScriptIntel();

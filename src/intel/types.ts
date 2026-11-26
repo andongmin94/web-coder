@@ -103,3 +103,16 @@ export const tokenEnd = (code: string, from: number) => {
     else i = Math.min(code.length, i + 1);
     return Math.max(i, from + 1);
 };
+
+/** C++ 분석 요청 (clang 컴파일러 워커). 출력 원문을 돌려주고, 실패하면 null */
+export type CppAnalyzeRequest =
+    | {
+          type: 'complete';
+          source: string;
+          std: string;
+          line: number;
+          col: number;
+          memberOnly: boolean;
+      }
+    | { type: 'diagnose'; source: string; std: string };
+export type CppAnalyze = (request: CppAnalyzeRequest, timeoutMs?: number) => Promise<string | null>;

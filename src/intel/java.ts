@@ -3,8 +3,8 @@
 // - 자동완성/시그니처/호버: JDK 색인(SDK 클래스 시그니처) + 소스의 선언을 보고 타입을 추론
 //   예) Scanner sc → sc. → nextInt…, List<Integer> list → list.get(0). → Integer 멤버
 import type { JavaClass, JavaIndex, JavaMember } from './classfile.ts';
+import { blankLiterals } from '../shared/source-text.ts';
 import {
-    blankLiterals,
     enclosingClasses,
     parseUserClasses,
     splitTop,

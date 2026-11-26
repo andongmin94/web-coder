@@ -2,7 +2,7 @@
 // - 자동완성/시그니처: clang -code-completion-at (멤버 접근이면 전역 목록 생략)
 // - 실시간 진단: clang -fsyntax-only
 // bits/stdc++.h PCH가 있으면 대부분 100~400ms 안에 응답합니다.
-import type { RunnerPool } from '../runner/pool.ts';
+import type { CppAnalyze } from './types.ts';
 import {
     parseClangCompletions,
     parseClangDiagnostics,
@@ -17,7 +17,8 @@ const clangPosition = (code: string, pos: number) => {
     return { line, col };
 };
 
-export const createCppIntel = (pool: RunnerPool, std: string): LanguageIntel => ({
+/** analyze: clang으로 자동완성·진단을 돌려 출력 원문을 받는 함수 (RunnerPool.cppAnalyze) */
+export const createCppIntel = (analyze: CppAnalyze, std: string): LanguageIntel => ({
     triggerCharacters: ['.', '->', '::'],
 
     async complete(code, pos, explicit) {
@@ -27,7 +28,7 @@ export const createCppIntel = (pool: RunnerPool, std: string): LanguageIntel => 
         // `std::` 처럼 이름공간 뒤에서는 이름공간 수준의 선언이 필요하므로 멤버 전용 모드를 쓰지 않습니다.
         const scoped = /::$/.test(before);
         if (!explicit && !member && !scoped && pos - from < 2) return null;
-        const output = await pool.cppAnalyze({
+        const output = await analyze({
             type: 'complete',
             source: code,
             std,
@@ -46,7 +47,7 @@ export const createCppIntel = (pool: RunnerPool, std: string): LanguageIntel => 
     },
 
     async signature(code, pos) {
-        const output = await pool.cppAnalyze({
+        const output = await analyze({
             type: 'complete',
             source: code,
             std,
@@ -57,7 +58,7 @@ export const createCppIntel = (pool: RunnerPool, std: string): LanguageIntel => 
     },
 
     async diagnose(code) {
-        const output = await pool.cppAnalyze({ type: 'diagnose', source: code, std });
+        const output = await analyze({ type: 'diagnose', source: code, std });
         return output == null ? [] : parseClangDiagnostics(output, code);
     },
 });

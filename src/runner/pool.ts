@@ -23,6 +23,7 @@ import type {
     WorkerResponse,
 } from './types.ts';
 import { createWatchdog } from './watchdog.ts';
+import type { CppAnalyze } from '../intel/types.ts';
 
 const RUNNER_URL = 'runner-worker.js';
 const CPP_COMPILER_URL = 'clang/compiler-worker.js';
@@ -534,24 +535,12 @@ export class RunnerPool {
     }
 
     /** C++ 인텔리센스 (자동완성/진단): clang 출력 원문. 실패하면 null */
-    async cppAnalyze(
-        message:
-            | {
-                  type: 'complete';
-                  source: string;
-                  std: string;
-                  line: number;
-                  col: number;
-                  memberOnly: boolean;
-              }
-            | { type: 'diagnose'; source: string; std: string },
-        timeoutMs = 20_000
-    ): Promise<string | null> {
+    cppAnalyze: CppAnalyze = async (message, timeoutMs = 20_000) => {
         const res = await this.getCompiler().request(message, timeoutMs);
         if (!res || res.type !== 'intel') return null;
         if (res.needsPch) void this.buildPch(message.std, usesExceptions(message.source));
         return res.output;
-    }
+    };
 
     /** Java 실시간 진단 (javac만, WebAssembly 생성 없음) */
     javaCheck(source: string, release: string) {
