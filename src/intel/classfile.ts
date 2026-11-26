@@ -11,6 +11,8 @@ export type JavaMember = {
     s?: 1;
     /** 메서드 자체의 타입 매개변수 */
     tp?: string[];
+    /** 가변 인자 메서드 (마지막 매개변수가 String... 같은 것) */
+    v?: 1;
 };
 
 export type JavaClass = {
@@ -31,6 +33,8 @@ export type JavaClass = {
 const ACC_PUBLIC = 0x0001;
 const ACC_STATIC = 0x0008;
 const ACC_BRIDGE = 0x0040;
+/** 메서드의 마지막 매개변수가 가변 인자(...) */
+const ACC_VARARGS = 0x0080;
 const ACC_SYNTHETIC = 0x1000;
 const ACC_INTERFACE = 0x0200;
 
@@ -293,6 +297,7 @@ export const parseClassFile = (
             t: sig.ret,
             ...(acc & ACC_STATIC ? { s: 1 as const } : {}),
             ...(sig.tp.length ? { tp: sig.tp } : {}),
+            ...(acc & ACC_VARARGS ? { v: 1 as const } : {}),
         };
         if (name === '<init>') ctors.push({ ...member, n: '' });
         else methods.push(member);

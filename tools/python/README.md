@@ -33,7 +33,10 @@ unzip -q python-3.13.17-wasi_sdk-24.zip -d py
 ## 알려진 한계
 
 - `zlib` 모듈이 없습니다. (이 빌드에 포함되지 않음)
-- `lru_cache`를 붙인 함수처럼 C 코드를 거치는 재귀는 깊이 약 1,600에서 `RecursionError`가 납니다.
-  WASI 빌드에 고정된 C 재귀 제한이라 `sys.setrecursionlimit`으로 늘릴 수 없습니다. (네이티브 CPython은 약 10,000)
+- `lru_cache`를 붙인 함수처럼 C 코드를 거치는 재귀는 깊이 약 9,600까지 됩니다. (네이티브 CPython과 비슷)
+  WASI 빌드는 C 재귀 제한(`Py_C_RECURSION_LIMIT`)이 5000으로 고정이라 원래는 약 1,600에서 `RecursionError`가
+  났는데, 빌드할 때 스레드 상태를 만드는 `new_threadstate`의 처음 값을 30000으로 바꿉니다.
+  ([src/runner/python-patch.ts](../../src/runner/python-patch.ts)) 더 크게 하면 인터프리터의 C 스택(선형 메모리,
+  크기 고정)이 깊이 약 15,000에서 넘쳐 `memory access out of bounds`로 죽으므로, 그 전에 `RecursionError`가 나게 둡니다.
   순수 Python 함수의 재귀는 `sys.setrecursionlimit`만큼 됩니다. (70만까지 확인)
 - 네이티브 CPython보다 느립니다.

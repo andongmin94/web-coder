@@ -32,7 +32,7 @@
         - LTO로 링크해서 `long long dp[5001][5001]` 같은 큰 전역 배열이 있어도 컴파일이 느려지지 않습니다.
         - wasm용 libc++의 `cin`이 매우 느려서 정수 파서를 교체해 넣고, `sync_with_stdio(false)`를 쓰면 `cin`/`cout`에 64KB 버퍼를 붙입니다. (정수 100만 개 읽기 2.1초 → 0.3초)
         - 전역 변수 이름이 libc 함수(`link`, `access` 등)와 겹쳐 링크가 실패하면 이름을 바꿔 자동으로 다시 컴파일합니다.
-    - **Python 3**: CPython 3.13 WASI 빌드. 순수 Python 재귀는 깊이 70만까지 확인. `lru_cache` 재귀처럼 C 코드를 거치는 재귀는 약 1,600에서 `RecursionError`가 납니다. 출처와 한계는 [tools/python/README.md](./tools/python/README.md)
+    - **Python 3**: CPython 3.13 WASI 빌드. 순수 Python 재귀는 깊이 70만까지 확인. `lru_cache` 재귀처럼 C 코드를 거치는 재귀는 약 9,600까지 됩니다. (WASI 빌드의 C 재귀 한도를 빌드 때 늘림) 출처와 한계는 [tools/python/README.md](./tools/python/README.md)
     - **node.js**: sandbox 페이지의 워커에서 Chrome V8로 직접 실행. Node처럼 모듈 함수로 감싸 실행하고(최상위 `return`, `__dirname`), `fs.readFileSync('/dev/stdin')`(인코딩이 없으면 `Buffer`), `readline`, `process.exit`, `Buffer`, `path`·`assert`·`events`·`util` 모듈을 지원합니다. `console.log`의 객체·배열 출력 형식도 Node와 같습니다.
         - 백준은 `node --stack-size=65536`으로 실행하지만 브라우저 워커는 스택을 늘릴 수 없어 재귀가 수천에서 막힙니다. 그때는 C 스택을 크게 잡아 직접 빌드한 QuickJS로 자동으로 다시 실행합니다. (깊이 약 60만, [tools/quickjs/README.md](./tools/quickjs/README.md))
     - **Java**: OpenJDK javac + [TeaVM](https://teavm.org)을 wasm으로 빌드한 [teavm-javac](https://github.com/konsoletyper/teavm-javac)로 컴파일하고 WebAssembly(GC)로 실행. `Scanner`, `BufferedReader`/`BufferedWriter`, 컬렉션, `record`, `Thread`(`new Thread(null, r, "", 1 << 26)` 포함) 등 지원. 잡히지 않은 예외와 `printStackTrace()`는 JVM처럼 `at Main.solve(Main.java:12)` 형식의 스택 트레이스를 보여 주고, 컴파일 에러에는 javac처럼 해당 소스 줄과 위치(`^`)가 붙습니다. 빌드·패치 방법은 [tools/java/README.md](./tools/java/README.md)

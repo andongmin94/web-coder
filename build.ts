@@ -239,6 +239,10 @@ const copyStatic = async () => {
     // 원본 아이콘(크기별 아이콘을 만드는 데 씀)과 README용 로고는 확장에 필요 없습니다.
     await rm(`${outdir}/asset/icon.png`);
     await rm(`${outdir}/logo.svg`);
+    // Python의 C 재귀 한도를 늘립니다. (src/runner/python-patch.ts)
+    const { patchPython } = await import('./src/runner/python-patch.ts');
+    const pythonWasm = `${outdir}/wasm/python-3.13.17.wasm`;
+    await writeFile(pythonWasm, patchPython(new Uint8Array(await readFile(pythonWasm))));
     // 라이선스: public/licenses/의 원문에 npm 패키지에 들어 있는 것을 더합니다. (README.txt에 목록)
     await cp('node_modules/typescript-js/LICENSE.txt', `${outdir}/licenses/Apache-2.0.txt`);
     await cp(

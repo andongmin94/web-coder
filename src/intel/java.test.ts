@@ -179,7 +179,19 @@ test('시그니처: 문자열 안의 쉼표와 괄호는 세지 않는다', () =
     for (const arg of ['"("', '"%d, %d"', "'('"]) {
         const sig = at(`class Main { void f() { System.out.printf(${arg}, `);
         assert.ok(sig, arg);
-        assert.equal(sig![0].label, 'printf(String, Object[]) → PrintStream', arg);
-        assert.deepEqual(sig![0].active, [15, 23], arg); // 두 번째 매개변수 Object[]
+        assert.equal(sig![0].label, 'printf(String, Object...) → PrintStream', arg);
+        assert.deepEqual(sig![0].active, [15, 24], arg); // 두 번째 매개변수 Object...
     }
+});
+
+test('시그니처: 가변 인자는 몇 번째 인자든 마지막 매개변수 칸', () => {
+    for (const args of ['"%d %d", 1, ', '"%d %d %d", 1, 2, ']) {
+        const code = `class Main { void f() { System.out.printf(${args}`;
+        const sig = javaSignature(index, code, code.length)!;
+        assert.equal(sig[0].label, 'printf(String, Object...) → PrintStream');
+        assert.deepEqual(sig[0].active, [15, 24], args);
+    }
+    // 가변 인자가 아닌 메서드는 인자가 넘치면 강조하지 않음
+    const code = 'class Main { void f() { Math.max(1, 2, ';
+    assert.ok(javaSignature(index, code, code.length)!.every((s) => !s.active));
 });

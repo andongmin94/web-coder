@@ -592,14 +592,19 @@ export const javaSignature = (
     const sigs: IntelSignature[] = [];
     for (const m of candidates) {
         const params = (m.p ?? []).map(shortType);
+        // 가변 인자는 Java 소스처럼 Object... 로
+        if (m.v && params.length)
+            params[params.length - 1] = params.at(-1)!.replace(/\[\]$/, '...');
         const label = `${m.n}(${params.join(', ')})${m.t && !ctor ? ` → ${shortType(m.t)}` : ''}`;
         if (seen.has(label)) continue;
         seen.add(label);
         let active: [number, number] | undefined;
-        if (comma < params.length) {
+        // 가변 인자는 마지막 매개변수 칸이 계속 이어집니다. (printf("%d %d", a, b)의 b도 Object... 칸)
+        const at = m.v && params.length && comma >= params.length ? params.length - 1 : comma;
+        if (at < params.length) {
             const start =
-                m.n.length + 1 + params.slice(0, comma).reduce((n, p) => n + p.length + 2, 0);
-            active = [start, start + params[comma].length];
+                m.n.length + 1 + params.slice(0, at).reduce((n, p) => n + p.length + 2, 0);
+            active = [start, start + params[at].length];
         }
         sigs.push({ label, active });
     }
