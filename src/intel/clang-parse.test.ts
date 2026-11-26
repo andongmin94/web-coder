@@ -67,8 +67,31 @@ test('진단: 헤더 안의 에러는 그것을 부른 내 코드 위치에, not
     assert.equal(d[1].severity, 'error');
     assert.equal(code.slice(d[1].from, d[1].to), 'sort');
     assert.match(d[1].message, /no matching function for call to object \(sort\.h:100\)/);
-    assert.match(d[1].message, /candidate function not viable/);
     assert.match(d[1].message, /requested here/);
+});
+
+test('진단: 같은 호출이 일으킨 헤더 에러 묶음은 그 위치의 진단 하나로', () => {
+    // 실제 clang 출력의 모양: 묶음마다 헤더 에러 → 헤더 note 사슬 → 내 코드 note, 마지막은 에러 수 제한으로 잘림
+    const code = 'int main(){\n  sort(v.begin(), v.end(), 5);\n}';
+    const chain = [
+        "/inc/__algorithm/make_heap.h:49:12: note: in instantiation of function template specialization 'std::__sift_down' requested here",
+        "main.cpp:2:3: note: in instantiation of function template specialization 'std::sort' requested here",
+    ];
+    const out = [
+        "/inc/__algorithm/sift_down.h:48:16: error: called object type 'int' is not a function",
+        ...chain,
+        "/inc/__algorithm/sift_down.h:55:7: error: called object type 'int' is not a function",
+        "/inc/__algorithm/push_heap.h:42:9: error: no matching function for call to '__sift_up'",
+        ...chain,
+        "/inc/__algorithm/sort.h:125:7: error: called object type 'int' is not a function",
+    ].join('\n');
+    const d = parseClangDiagnostics(out, code);
+    assert.equal(d.length, 1);
+    assert.equal(code.slice(d[0].from, d[0].to), 'sort');
+    for (const where of ['sift_down.h:48', 'sift_down.h:55', 'push_heap.h:42', 'sort.h:125'])
+        assert.ok(d[0].message.includes(where), where);
+    // 헤더 안의 instantiation 사슬은 넣지 않고 내 코드 위치 하나만
+    assert.equal(d[0].message.match(/참고:/g)?.length, 1);
 });
 
 test('진단: 내 코드 위치가 없는 헤더 에러는 첫 줄에', () => {

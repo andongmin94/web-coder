@@ -210,7 +210,8 @@ export const parseClangSignatures = (output: string): IntelSignature[] => {
  *
  * 헤더 안에서 난 에러(예: sort에 잘못된 비교 함수를 넘겨 <algorithm> 안에서 나는 에러)는 그 뒤에 오는
  * `main.cpp:…: note: in instantiation of … requested here`가 가리키는 내 코드 위치에 표시합니다.
- * 그런 note가 없으면 첫 줄에 표시합니다. (그냥 버리면 컴파일이 안 되는데 표시가 없음)
+ * 같은 호출 하나가 헤더 에러를 여러 묶음 일으키므로, 같은 위치로 가는 것은 한 진단으로 합칩니다.
+ * clang이 에러 수 제한으로 내 코드 위치를 쓰기 전에 멈추면 직전에 찾은 위치에, 그것도 없으면 첫 줄에 붙입니다.
  */
 export const parseClangDiagnostics = (
     output: string,
@@ -219,13 +220,29 @@ export const parseClangDiagnostics = (
 ): IntelDiagnostic[] => {
     const result: IntelDiagnostic[] = [];
     const re = /^(.+?):(\d+):(\d+): (error|warning|note|fatal error): (.*)$/;
-    /** 아직 내 코드 위치를 못 찾은 헤더 진단 */
-    let pending: { severity: IntelDiagnostic['severity']; message: string } | null = null;
+    /** 아직 내 코드 위치를 못 찾은 헤더 에러들 */
+    let pending: { severity: IntelDiagnostic['severity']; lines: string[] } | null = null;
+    /** 헤더 에러를 붙인 마지막 진단 (같은 위치면 합치고, 위치를 못 찾은 헤더 에러도 여기에) */
+    let lastHeaderDiag: IntelDiagnostic | null = null;
     /** 마지막 진단이 내 코드의 것인지 (헤더 진단 뒤의 note를 엉뚱한 진단에 붙이지 않게) */
     let lastIsMine = false;
+    const addLines = (diag: IntelDiagnostic, lines: string[]) => {
+        for (const line of lines)
+            if (!diag.message.split('\n').includes(line)) diag.message += `\n${line}`;
+    };
     const flushPending = () => {
         if (!pending) return;
-        result.push({ from: 0, to: tokenEnd(code, 0), ...pending });
+        if (lastHeaderDiag) {
+            addLines(lastHeaderDiag, pending.lines);
+            if (pending.severity === 'error') lastHeaderDiag.severity = 'error';
+        } else {
+            result.push({
+                from: 0,
+                to: tokenEnd(code, 0),
+                severity: pending.severity,
+                message: pending.lines.join('\n'),
+            });
+        }
         pending = null;
     };
     const at = (l: string, c: string) => {
@@ -240,28 +257,38 @@ export const parseClangDiagnostics = (
         if (level === 'note') {
             if (pending && mine) {
                 // 헤더 에러를 일으킨 내 코드 위치
-                result.push({
-                    ...at(l, c),
-                    ...pending,
-                    message: `${pending.message}\n참고: ${message}`,
-                });
+                const range = at(l, c);
+                if (lastHeaderDiag && lastHeaderDiag.from === range.from) {
+                    addLines(lastHeaderDiag, pending.lines);
+                    if (pending.severity === 'error') lastHeaderDiag.severity = 'error';
+                } else {
+                    lastHeaderDiag = {
+                        ...range,
+                        severity: pending.severity,
+                        message: `${pending.lines.join('\n')}\n참고: ${message}`,
+                    };
+                    result.push(lastHeaderDiag);
+                }
                 pending = null;
                 lastIsMine = true;
-            } else if (pending) {
-                pending.message += `\n참고: ${message}`;
-            } else if (lastIsMine) {
-                result.at(-1)!.message += `\n참고: ${message}`;
+            } else if (!pending && lastIsMine) {
+                // 헤더 안의 "in instantiation" 사슬은 길기만 해서 빼고, 내 에러에 딸린 note만 붙입니다.
+                if (mine || !/^in instantiation of /.test(message))
+                    addLines(result.at(-1)!, [`참고: ${message}`]);
             }
             continue;
         }
-        flushPending();
         const severity = level === 'warning' ? 'warning' : 'error';
         if (mine) {
+            flushPending();
             result.push({ ...at(l, c), severity, message });
             lastIsMine = true;
         } else {
-            const name = where.split('/').pop();
-            pending = { severity, message: `${message} (${name}:${l})` };
+            const text = `${message} (${where.split('/').pop()}:${l})`;
+            if (pending) {
+                pending.lines.push(text);
+                if (severity === 'error') pending.severity = 'error';
+            } else pending = { severity, lines: [text] };
             lastIsMine = false;
         }
     }
