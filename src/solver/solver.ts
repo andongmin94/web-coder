@@ -33,6 +33,7 @@ import {
 } from './tests-view.ts';
 import { storage, type CustomTest } from './storage.ts';
 import { chooseInitialLanguage, submitWarning } from './decisions.ts';
+import { autoPrune, touchProblem } from './storage-prune.ts';
 import { setupSplit } from './split.ts';
 import { $, h } from './dom.ts';
 import type { LanguageIntel } from '../intel/types.ts';
@@ -819,6 +820,11 @@ const init = async (data: {
     const prefs = await storage.getPrefs();
     const choice = chooseInitialLanguage(languages, data.form, prefs.lastLanguageLabel);
     await switchLanguage(choice.language, choice.initialCode);
+    // 저장 공간 자동 관리: 연 문제를 기록하고, 하루 한 번 예산을 넘었으면 오래된 것부터 정리 (storage-prune.ts)
+    if (problemId)
+        void touchProblem(problemId)
+            .then(() => autoPrune(problemId))
+            .catch(() => {});
     if (choice.unsupportedSource) {
         const label = data.form.languages.find((l) => l.id === data.form.selectedLanguageId)?.label;
         showToast(
