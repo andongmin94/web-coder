@@ -1,6 +1,6 @@
 {
   "name": "web-coder",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "private": true,
   "description": "웹 코더 - BOJ 제출 페이지 로컬 실행/제출 확장",
   "type": "module",
