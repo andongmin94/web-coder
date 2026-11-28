@@ -12,6 +12,11 @@ Pyright (intel/pyright.worker.js)                   MIT                         
 typeshed (intel/typeshed-stdlib.json)               Apache License 2.0 / MIT                   typeshed-LICENSE.txt
 TypeScript (intel/ts-worker.js)                     Apache License 2.0                         Apache-2.0.txt
 clang-format, Ruff 포매터 (@wasm-fmt, format/)        MIT                                        ../format/*-LICENSE.txt
+Open Sans (일반·기울임)                               SIL Open Font License 1.1                  OpenSans-OFL.txt
+  소스: https://github.com/google/fonts/tree/8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5/ofl/opensans
+Noto Sans KR                                        SIL Open Font License 1.1                  NotoSansKR-OFL.txt
+  소스: https://github.com/google/fonts/tree/b38c5c93af322c45f633e17ac440ec1e6c94d489/ofl/notosanskr
+  두 글꼴은 원본 가변 TTF의 전체 글리프를 보존해 WOFF2로 압축했습니다.
 
 LLVM-LICENSE.txt: https://github.com/llvm/llvm-project/blob/main/LICENSE.TXT
 OpenJDK-LICENSE.txt: https://github.com/openjdk/jdk25u/blob/master/LICENSE
